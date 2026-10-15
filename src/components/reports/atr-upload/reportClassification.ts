@@ -109,3 +109,37 @@ export function registerReportNumber(section: string, financialYear: string, rep
   if (!section || !financialYear || !reportNumber.trim()) return;
   taken.set(keyOf(section, financialYear, reportNumber), { section, financialYear, reportNumber: reportNumber.trim() });
 }
+
+// ─── Audit period ───
+// The period is stored as one human string, "DD Mon YYYY – DD Mon YYYY", but
+// edited as two dates. Both surfaces that edit it — the creation form and the
+// report-details header — share these, so what one writes the other can read
+// back. A private copy on either side would drift and silently lose the dates.
+
+/** ISO "yyyy-mm-dd" → "DD Mon YYYY". */
+export const fmtPeriodDate = (iso: string): string => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/** "DD Mon YYYY" → ISO "yyyy-mm-dd". */
+export const periodDateToIso = (label: string): string => {
+  // en-GB prints "Sept", which Date() will not parse — match on the prefix.
+  const m = label.trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  const month = m ? MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()) : -1;
+  if (!m || month < 0) return '';
+  return `${m[3]}-${String(month + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+};
+
+/** The stored "start – end" period back into its two ISO dates. */
+export const splitPeriod = (period?: string): [string, string] => {
+  const [a, b] = (period ?? '').split(/\s+[–-]\s+/);
+  return [a ? periodDateToIso(a) : '', b ? periodDateToIso(b) : ''];
+};
+
+/** Two ISO dates into the stored period string. Empty until both are set. */
+export const joinPeriod = (start: string, end: string): string =>
+  start && end ? `${fmtPeriodDate(start)} – ${fmtPeriodDate(end)}` : '';

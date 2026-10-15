@@ -48,6 +48,13 @@ import {
 } from 'lucide-react';
 import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
 import SopChartChat from './SopChartChat';
+import SopReadingView from './SopReadingView';
+import SopQuestionsPanel from './SopQuestionsPanel';
+import SopPlanView from './SopPlanView';
+import SopPagePicture from './SopPagePicture';
+import { sendSopDraftToBackground } from './sopBackgroundDrafts';
+import { rememberAnswer, rememberedAnswers, rowsLeftOutBy, sopQuestionsFor, SOP_QUESTION_CAP } from './sopQuestions';
+import { sopPagesFor, sopStructureFor } from './sopPages';
 import type { ChartFacts } from './sopChartEdits';
 import { buildSpine, riskKeyOf, risksAcrossStages } from './sopSpine';
 import { draftSopRows } from './sopProcurementSeed';
@@ -77,7 +84,7 @@ import { IraDrafted } from './IraState';
 import { Tickmark } from './parts';
 import DialogFocus from '../shared/DialogFocus';
 
-type Step = 'columns' | 'prompt' | 'review' | 'flowchart';
+type Step = 'columns' | 'reading' | 'plan' | 'review' | 'flowchart';
 
 /** The two readings of one SOP draft. Same rows, same prompt behind both — a
  *  flowchart to follow and a matrix to work on — so editing the prompt changes
@@ -118,6 +125,9 @@ export interface RacmImportReviewProps {
   /** Import pressed: the rows as controls, IDs already ENTITY/PROCESS/R001/C001.
    *  The caller saves them (to the RACM tab, or the engagement). */
   onImport: (controls: Control[], meta: RacmImportMeta) => void;
+  /** Reopening a draft that finished in the background (stage 5): open at the
+   *  Flowchart, drafted from these answers, with the reading already done. */
+  resume?: { answers: Record<string, string> };
 }
 
 const RACM_STEPS: { key: Step; label: string }[] = [{ key: 'columns', label: 'Columns' }, { key: 'review', label: 'Review' }];
@@ -146,7 +156,7 @@ const RACM_STEPS: { key: Step; label: string }[] = [{ key: 'columns', label: 'Co
  * left out. Shape first, then detail.
  */
 const SOP_STEPS: { key: Step; label: string }[] = [
-  { key: 'prompt', label: 'Prompt' }, { key: 'flowchart', label: 'Flowchart' }, { key: 'review', label: 'Review' },
+  { key: 'reading', label: 'Reading' }, { key: 'plan', label: 'Plan' }, { key: 'flowchart', label: 'Flowchart' }, { key: 'review', label: 'Review' },
 ];
 
 /** Never "Continuous" — a control that runs all the time is tested at the
@@ -159,23 +169,27 @@ const TYPES: ControlType[] = ['Preventive', 'Detective'];
  *  reads in the matrix the way their file writes it. */
 const YES_NO = ['Yes', 'No'];
 
-const EXTRACT_STEPS = ['Parsing the SOP', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & required files'];
-const EXTRACT_STEP_MS = 400;
+// What happens AFTER the reading (7 Oct): the pages are read and the layout
+// known, so what is left is copying the SOP's own words into each field.
+const EXTRACT_STEPS = ['Copying the SOP’s words into each field', 'Linking each control to its risk', 'Attaching page references', 'Drafting attributes & required files'];
+/** How long Ira looks over the whole SOP before it reports the structure, and
+ *  then how long each page takes — a few seconds for the demo's 28 pages. */
+const READ_LAYOUT_MS = 1400;
+const READ_PAGE_MS = 160;
+// Long enough that leaving is a real choice (stage 5) — the demo's extraction
+// takes about six seconds, and the reader is told they can go.
+const EXTRACT_STEP_MS = 1500;
 /** The header-row picker offers the first ten rows — a title block above the
  *  headers is common, ten rows of it is not. */
 const HEADER_ROW_CHOICES = 10;
-/** The extraction prompt for each of the two choices. Point 7 of the default is
- *  what asks Ira for controls the SOP never described, so "only what the SOP
- *  says" is the default prompt without it. A function, not a module constant:
+/** The extraction prompt. Point 7 of the default is what asked Ira for
+ *  controls the SOP never described; it is always taken out now (7 Oct: Ira
+ *  extracts only what the SOP says). A function, not a module constant:
  *  racmImport sits in this module's import graph, and a const reading one of
  *  its exports at load is the TDZ trap this folder already fell into once. */
-function sopPromptFor(withSuggestions: boolean): string {
-  return withSuggestions ? DEFAULT_SOP_PROMPT : DEFAULT_SOP_PROMPT.split('\n').filter(l => !/^7\./.test(l)).join('\n');
+function sopPrompt(): string {
+  return DEFAULT_SOP_PROMPT.split('\n').filter(l => !/^7\./.test(l)).join('\n');
 }
-const SOP_CHOICES: { suggest: boolean; title: string; hint: string }[] = [
-  { suggest: false, title: 'Only what the SOP says', hint: 'Every control the document describes, cited to its section. Nothing added.' },
-  { suggest: true, title: 'Also add Ira’s suggestions', hint: 'Plus controls the SOP is silent on but its risks call for — marked Suggested, for you to accept or leave out.' },
-];
 
 const FIELD_BY_KEY = new Map(RACM_FIELDS.map(f => [f.key, f]));
 const fieldLabel = (k: RacmFieldKey) => FIELD_BY_KEY.get(k)?.label ?? k;
@@ -826,7 +840,7 @@ function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boole
   return <Pill tone={tone}>{match.confidence}%</Pill>;
 }
 
-export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport }: RacmImportReviewProps) {
+export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport, resume }: RacmImportReviewProps) {
   // Agentic UX #11: no toasts — a failed import is said beside the Import button.
   const importNote = useInlineNote();
   const logEvent = useAuditLog();
@@ -846,7 +860,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const cfg = useRacmConfig(setup.key);
   const dialogRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const [step, setStep] = useState<Step>(mode === 'racm' ? 'columns' : 'prompt');
+  const [step, setStep] = useState<Step>(mode === 'racm' ? 'columns' : resume ? 'flowchart' : 'reading');
 
   /** What the rows under review were built from — the column mapping, or the
    *  prompt. Going Back and on again without changing it keeps every review
@@ -867,7 +881,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fillOpen, setFillOpen] = useState(false);
   /** Ira's extra controls, folded under the table (#6) until asked for. */
-  const [extrasOpen, setExtrasOpen] = useState(false);
   /** What Ira has already written into the rows, per row — the value and the
    *  reason it was read from. This is a record of work done, not a queue of
    *  proposals: the values are in the rows from the moment Review opens. */
@@ -1087,11 +1100,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   // 30 Sep). The prompt still exists — it is what the draft is read from — but
   // it is written from the choice, never typed. The default is the review's
   // own rule: extract only what the SOP says; suggestions are opt-in.
-  const [withSuggestions, setWithSuggestions] = useState(false);
-  const prompt = useMemo(() => sopPromptFor(withSuggestions), [withSuggestions]);
+  const prompt = useMemo(() => sopPrompt(), []);
   const [extract, setExtract] = useState<{ phase: 'idle' } | { phase: 'running'; done: number } | { phase: 'failed' }>({ phase: 'idle' });
   const extracting = extract.phase === 'running';
   const timers = useRef<number[]>([]);
+  const extractStarted = useRef(0);
   const progressRef = useRef<HTMLDivElement>(null);
   useEffect(() => () => { timers.current.forEach(window.clearTimeout); }, []);
   useEffect(() => { if (extracting) progressRef.current?.scrollIntoView({ block: 'nearest' }); }, [extracting]);
@@ -1099,9 +1112,14 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const validateAndExtract = () => {
     // the same prompt already produced the draft under review — go back to it
     // rather than throwing away what the reviewer decided there
-    if (builtFrom.current === prompt) { setStep('flowchart'); return; }
+    // The answers to Ira's questions are part of what the draft was built from:
+    // a changed answer is a different draft.
+    const sig = `${prompt}|${JSON.stringify(sopAnswers)}`;
+    if (builtFrom.current === sig) { setStep('flowchart'); return; }
     const used = prompt;
+    const answeredOut = rowsLeftOutBy(readingQuestions, sopAnswers);
     setExtract({ phase: 'running', done: 0 });
+    extractStarted.current = Date.now();
     timers.current = EXTRACT_STEPS.map((_, i) => window.setTimeout(() => setExtract({ phase: 'running', done: i + 1 }), (i + 1) * EXTRACT_STEP_MS));
     // a beat after the last tick, so the finished list is seen before it goes
     timers.current.push(window.setTimeout(() => {
@@ -1109,7 +1127,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
         const drafted = draftWithNames(used);
         setRows(drafted);
         resetReview(drafted);
-        builtFrom.current = used;
+        // What the reader told Ira while it read: a row they said is not a
+        // control, or the second half of one risk, arrives left out.
+        if (answeredOut.length) setLeftOut(prev => new Set([...prev, ...answeredOut]));
+        builtFrom.current = sig;
         setExtract({ phase: 'idle' });
         // Straight to the chart: the first question after an extraction is
         // whether Ira read the document right, not whether row 7 has an owner.
@@ -1161,6 +1182,103 @@ export default function RacmImportReview({ mode, file, process, entity, existing
    *  rows name it — so the heading and the boxes below can never disagree. */
   const liveRiskCount = useMemo(() => new Set(liveDraft.map(riskKeyOf)).size, [liveDraft]);
 
+  // ── Reading (SOP) ── the pages Ira reads and how far it has got. Held here,
+  // not in the view, so going Back to the step shows the log as it was.
+  const sopPages = useMemo(() => (mode === 'sop' ? sopPagesFor(process, liveDraft) : []), [mode, process, liveDraft]);
+  const sopStructure = useMemo(() => (mode === 'sop' ? sopStructureFor(process, liveDraft) : null), [mode, process, liveDraft]);
+  const [readUpTo, setReadUpTo] = useState(resume ? Number.MAX_SAFE_INTEGER : 0);
+  const readingDone = sopPages.length > 0 && readUpTo >= sopPages.length;
+  // ── Ira's questions (SOP, stage 3) ── raised where the draft shows a doubt,
+  // asked when the reading reaches their page, six at most; the rest wait for
+  // Review. Answers are remembered per file for the session.
+  const sopQuestions = useMemo(() => (mode === 'sop' ? sopQuestionsFor(sopPages, liveDraft) : []), [mode, sopPages, liveDraft]);
+  const readingQuestions = useMemo(() => sopQuestions.slice(0, SOP_QUESTION_CAP), [sopQuestions]);
+  const heldQuestions = useMemo(() => sopQuestions.slice(SOP_QUESTION_CAP), [sopQuestions]);
+  const [answeredBefore] = useState(() => rememberedAnswers(file.name));
+  const [sopAnswers, setSopAnswers] = useState<Record<string, string>>(resume?.answers ?? answeredBefore);
+  const answersReused = readingQuestions.length > 0 && readingQuestions.every(q => answeredBefore[q.id]);
+  const askedQuestions = readingQuestions.filter(q => answersReused || readUpTo >= q.page);
+  const unanswered = readingQuestions.filter(q => !sopAnswers[q.id]).length;
+  const answerSop = (questionId: string, optionId: string) => {
+    setSopAnswers(prev => ({ ...prev, [questionId]: optionId }));
+    rememberAnswer(file.name, questionId, optionId);
+  };
+  // A question answered at Review changes the table directly: the row its old
+  // answer left out comes back, the row its new one leaves out goes.
+  const answerHeld = (questionId: string, optionId: string) => {
+    const q = heldQuestions.find(x => x.id === questionId);
+    if (!q) return;
+    const was = q.options.find(o => o.id === sopAnswers[questionId])?.leavesOut ?? [];
+    const now = q.options.find(o => o.id === optionId)?.leavesOut ?? [];
+    setLeftOut(prev => { const n = new Set(prev); was.forEach(k => n.delete(k)); now.forEach(k => n.add(k)); return n; });
+    answerSop(questionId, optionId);
+  };
+  // Review (stage 6): which row's page is open, and which rows show their
+  // "how to test" paragraph.
+  const [sourceFor, setSourceFor] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState<Set<string>>(new Set());
+  // Stage 8: the edit box on Review, and "extract these again".
+  const [reviewChat, setReviewChat] = useState(false);
+  /** Read rows back from the SOP: the fields the SOP states return to its own
+   *  words (and any rename of them is dropped); what the reviewer filled in —
+   *  owners, ratings, anything the SOP is silent on — stays. Returns how to put
+   *  the rows back as they were, for Undo. */
+  const reextractRows = useCallback((keys: string[]) => {
+    const fresh = new Map(draftSopRows(process, file.name, prompt, existing, entity).map(r => [r.key, r]));
+    const SOP_FIELDS: RacmFieldKey[] = ['riskDescription', 'controlTitle', 'controlActivity', 'objective', 'subProcess', 'attributes', 'controlEvidence', 'designChecks'];
+    const patches = new Map<string, Partial<Record<RacmFieldKey, string>>>();
+    const ids: string[] = [];
+    for (const r of rows) {
+      const f = fresh.get(r.key);
+      if (!f || !keys.includes(r.key)) continue;
+      const patch: Partial<Record<RacmFieldKey, string>> = {};
+      for (const k of SOP_FIELDS) if (cell(f.values[k]) !== cell(r.values[k])) patch[k] = f.values[k] ?? '';
+      const id = cell(r.values.controlId) || r.key;
+      if (Object.keys(patch).length || controlNames[id]) { patches.set(r.key, patch); ids.push(id); }
+    }
+    const before = { rows, controlNames, left: leftOut };
+    if (!patches.size) return { count: 0, undo: () => {} };
+    setRows(prev => rebuildRows(prev, patches));
+    setControlNames(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n; });
+    return {
+      count: patches.size,
+      undo: () => { setRows(before.rows); setControlNames(before.controlNames); setLeftOut(before.left); },
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, controlNames, leftOut, process, file.name, prompt, existing, entity]);
+
+  // ── Leaving mid-extraction (stage 5) ── the draft is handed to the session
+  // and finishes there; an app-wide notification reopens it. Closing the window
+  // while Ira extracts means the same thing — nothing is thrown away.
+  const leaveWhileExtracting = () => {
+    timers.current.forEach(window.clearTimeout);
+    timers.current = [];
+    const total = EXTRACT_STEPS.length * EXTRACT_STEP_MS + 300;
+    sendSopDraftToBackground({ file, process, entity, answers: sopAnswers }, total - (Date.now() - extractStarted.current));
+    onClose();
+  };
+  const closeOrLeave = () => (extracting && mode === 'sop' ? leaveWhileExtracting() : onClose());
+  // Reopened from that notification: drafted straight away from the same file
+  // and answers, exactly as the extraction would have, and opened at the chart.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!resume || resumed.current || mode !== 'sop') return;
+    resumed.current = true;
+    const drafted = draftWithNames(prompt);
+    setRows(drafted);
+    resetReview(drafted);
+    const out = rowsLeftOutBy(readingQuestions, resume.answers);
+    if (out.length) setLeftOut(prev => new Set([...prev, ...out]));
+    builtFrom.current = `${prompt}|${JSON.stringify(resume.answers)}`;
+  // Once, on open — the draft is what the answers were when the reader left.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (mode !== 'sop' || step !== 'reading' || readingDone || !sopPages.length) return;
+    const t = window.setTimeout(() => setReadUpTo(n => n + 1), readUpTo === 0 ? READ_LAYOUT_MS : READ_PAGE_MS);
+    return () => window.clearTimeout(t);
+  }, [mode, step, readUpTo, readingDone, sopPages.length]);
+
   // ── Review derivations ────────────────────────────────────────────────────────
   const effective = useMemo(() => rows.map(r => withAccepted(r, acceptedSugg[r.key])), [rows, acceptedSugg]);
   const isCandidate = (r: ImportRow) => r.origin !== 'suggested' || acceptedRows.has(r.key);
@@ -1196,7 +1314,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
    *  suggestions wait in their own list below it until one is added, and an
    *  added one that is unticked goes back there. */
   const tableRows = useMemo(() => effective.filter(r => r.origin !== 'suggested' || acceptedRows.has(r.key)), [effective, acceptedRows]);
-  const iraExtras = useMemo(() => effective.filter(r => r.origin === 'suggested' && !acceptedRows.has(r.key)), [effective, acceptedRows]);
   // Ticks every row IN THE TABLE; it never pulls Ira's list in with it.
   const setAllIncluded = (on: boolean) => {
     setLeftOut(on ? new Set() : new Set(effective.map(r => r.key)));
@@ -1605,8 +1722,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       // A control inside the dialog (a column picker, a rename box) that already
       // dealt with this Escape keeps it — only its own popover closes.
       if (e.defaultPrevented) return;
+      if (sourceFor) { setSourceFor(null); return; }
+      if (reviewChat) { setReviewChat(false); return; }
       if (fillOpen) { setFillOpen(false); return; }
-      if (step !== 'review' && !extracting) onClose();
+      if (step !== 'review') closeOrLeave();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -1632,7 +1751,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 {entity && <><span className="text-ink-300" aria-hidden>·</span><span className="truncate">{entity}</span></>}
               </p>
             </div>
-            <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
+            <button onClick={closeOrLeave} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label={extracting ? 'Leave — Ira keeps extracting' : 'Close'}><X size={15} /></button>
           </div>
         </div>
 
@@ -1806,89 +1925,30 @@ export default function RacmImportReview({ mode, file, process, entity, existing
             </>
           )}
 
-          {/* ── Prompt ── */}
-          {/* Full width (user ask, 24 Sep). It was capped at 54rem inside a
-              1100px modal, so a quarter of the dialog sat empty beside the one
-              thing the step is for — and the prompt is an instruction the reader
-              edits, not prose they read, so the measure argument that earns a
-              cap elsewhere does not apply. */}
-          {step === 'prompt' && (
+          {/* ── Reading ── */}
+          {/* Replaces the Prompt step (7 Oct, SOP extraction rework). Ira says
+              the whole time what it is doing: a look over every page, the
+              structure it found, then page by page. Extract waits for the end. */}
+          {step === 'reading' && (
             <div>
-              {/* While Ira runs: ONE thin line over the step, not a screen of its
-                  own (agentic UI review #13; user ask, 1 Oct — reverses the 24
-                  Sep "the run IS the screen"). The choices and the outline stay
-                  where they were, locked until the draft lands. */}
-              {extracting && (
-                <div ref={progressRef} role="status" aria-live="polite" className="mb-3">
-                  <p className="text-[0.75rem] text-ink-600 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
-                    Reading {file.name} · {extract.done >= EXTRACT_STEPS.length ? 'opening the draft…' : `${EXTRACT_STEPS[extract.done]!.toLowerCase()} · step ${extract.done + 1} of ${EXTRACT_STEPS.length}`}
-                  </p>
-                  {/* A quantity, not a verdict: how far through the four steps. */}
-                  <div className="mt-1 h-0.5 rounded-full bg-paper-100 overflow-hidden" role="presentation">
-                    <div className="h-full rounded-full bg-brand-500 transition-[width] duration-300"
-                      style={{ width: `${Math.round((Math.min(extract.done + 1, EXTRACT_STEPS.length) / EXTRACT_STEPS.length) * 100)}%` }} />
-                  </div>
-                </div>
-              )}
-              {(
-                /* The prompt and what it produces, side by side (user ask, 25
-                   Sep): "flowchart mere prompt ke side mein aayega. Agar main
-                   prompt change karungi, to flowchart bhi change ho jayega."
-                   The chart is the prompt's read-out — type a line, watch the
-                   controls it draws appear or go. It stacks on a narrow window,
-                   prompt first, because the prompt is the thing being written. */
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] items-start">
+              <SopReadingView fileName={file.name} pages={sopPages} structure={sopStructure} readUpTo={readUpTo}
+                aside={(
+                  <SopQuestionsPanel pages={sopPages} asked={askedQuestions} total={readingQuestions.length}
+                    heldForReview={heldQuestions.length} answers={sopAnswers} onAnswer={answerSop} reused={answersReused} />
+                )}
+                outline={(
                   <div>
-                    {/* Two plain choices, not a prompt (agentic UI review #11). The
-                        chart beside them redraws when the choice changes, the way
-                        it used to follow the typing. */}
-                    <fieldset>
-                      <legend className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5">What should Ira extract?</legend>
-                      <p className="text-[0.75rem] text-ink-500 mb-3">The outline on the right is a first pass over {file.name}. Press Extract and Ira writes out each risk and control in full.</p>
-                      <div className="space-y-2">
-                        {SOP_CHOICES.map(c => {
-                          const on = withSuggestions === c.suggest;
-                          return (
-                            <label key={c.title} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors', extracting && 'opacity-60 pointer-events-none',
-                              on ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-ink-300')}>
-                              <input type="radio" name="sop-scope" checked={on} disabled={extracting} onChange={() => setWithSuggestions(c.suggest)} className="mt-0.5 accent-brand-600 cursor-pointer disabled:cursor-not-allowed" />
-                              <span className="min-w-0">
-                                <span className="block text-[0.8125rem] font-semibold text-ink-900">{c.title}</span>
-                                <span className="block text-[0.75rem] leading-snug text-ink-500 mt-0.5">{c.hint}</span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                    {extract.phase === 'failed' && (
-                      <p role="alert" className="mt-4 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    {/* The SHAPE, not the chart (user ask, 29 Sep). What the
-                        prompt is being judged on here is how many risks it
-                        finds, how the controls spread across them, and whether
-                        any risk is left with nothing against it — all of which
-                        the numbered boxes say. The names, and the renaming that
-                        goes with them, wait for the Flowchart tab: they are
-                        what validating the prompt earns, and a reader who can
-                        already read the draft has no reason to validate it. */}
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3">
-                      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Structure</p>
+                    {/* The SHAPE, not the chart (user ask, 29 Sep) — numbered
+                        boxes; the names wait for the Flowchart step. */}
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-2">
+                      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Outline</p>
                       <span className="text-[0.6875rem] text-ink-400 tabular-nums">{plural(liveRiskCount, 'risk')} · {plural(liveDraft.length, 'control')}</span>
                       <span className="text-[0.6875rem] text-ink-300" aria-hidden>·</span>
-                      <span className="text-[0.6875rem] text-ink-500">the named flowchart opens after Extract</span>
+                      <span className="text-[0.6875rem] text-ink-500">the named flowchart opens after you confirm the plan</span>
                     </div>
-                    {/* The structure owns its own scrolling, so the pane is a
-                        frame of a fixed height and nothing more. */}
                     <div className={cn('rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 overflow-hidden', PROMPT_PANE_H)}>
                       {liveDraft.length === 0 ? (
-                        /* The pane is a fixed height now, so an empty one sits its
-                           message in the middle rather than stranding it at the top. */
-                        <p className="h-full flex items-center justify-center text-center text-[0.75rem] text-ink-500">This prompt draws no controls. Widen it to see something here.</p>
+                        <p className="h-full flex items-center justify-center text-center text-[0.75rem] text-ink-500">Ira found no controls in this SOP.</p>
                       ) : (
                         <SopFlowchartStructure rows={liveDraft} process={process} entity={entity} source={file.name}
                           idFor={r => cell(r.values.controlId) || r.key} omitted={0}
@@ -1896,14 +1956,60 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       )}
                     </div>
                   </div>
+                )} />
+            </div>
+          )}
+
+          {/* ── Plan ── */}
+          {/* What Ira will take from where, confirmed before it extracts (7 Oct,
+              stage 4). The extraction runs from here and opens the Flowchart. */}
+          {step === 'plan' && sopStructure && (
+            <div>
+              {/* While the draft is written: ONE thin line over the step, not a
+                  screen of its own (agentic UI review #13). */}
+              {extracting && (
+                <div ref={progressRef} role="status" aria-live="polite" className="mb-3">
+                  <p className="text-[0.75rem] text-ink-600 flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+                    Extracting from {file.name} · {extract.done >= EXTRACT_STEPS.length ? 'opening the draft…' : `${EXTRACT_STEPS[extract.done]!.charAt(0).toLowerCase() + EXTRACT_STEPS[extract.done]!.slice(1)} · step ${extract.done + 1} of ${EXTRACT_STEPS.length}`}
+                  </p>
+                  <div className="mt-1 h-0.5 rounded-full bg-paper-100 overflow-hidden" role="presentation">
+                    <div className="h-full rounded-full bg-brand-500 transition-[width] duration-300"
+                      style={{ width: `${Math.round((Math.min(extract.done + 1, EXTRACT_STEPS.length) / EXTRACT_STEPS.length) * 100)}%` }} />
+                  </div>
+                  {/* Stage 5: the reader is free to go once the plan is confirmed. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <p className="text-[0.75rem] text-ink-500">Extracting now — you can leave this page; we’ll let you know when the draft is ready.</p>
+                    <button type="button" onClick={leaveWhileExtracting}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">
+                      Leave and notify me
+                    </button>
+                  </div>
                 </div>
               )}
+              {extract.phase === 'failed' && (
+                <p role="alert" className="mb-3 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
+              )}
+              <SopPlanView fileName={file.name} pages={sopPages} structure={sopStructure} rows={liveDraft}
+                leftOut={rowsLeftOutBy(readingQuestions, sopAnswers).length} />
             </div>
           )}
 
           {/* ── Review ── */}
           {step === 'review' && (
             <>
+              {/* Questions past the sixth wait here (user's call, 7 Oct). Optional:
+                  an answer that says "leave it out" takes the row out of the table. */}
+              {mode === 'sop' && heldQuestions.length > 0 && (
+                <div className="mb-3">
+                  <SopQuestionsPanel pages={sopPages} asked={heldQuestions} total={heldQuestions.length} heldForReview={0}
+                    answers={sopAnswers} onAnswer={answerHeld} reused={false}
+                    title={(() => {
+                      const left = heldQuestions.filter(q => !sopAnswers[q.id]).length;
+                      return left ? `Ira still has ${left === 1 ? '1 question' : `${left} questions`}` : `Ira’s ${heldQuestions.length === 1 ? 'question' : 'questions'} · answered`;
+                    })()} />
+                </div>
+              )}
               {/* Three tiers, because eight facts on one line is eight facts nobody
                   reads (user ask, 24 Sep). The ANSWER first — how many of these rows
                   are actually going in, which is the question the reader arrived
@@ -1918,19 +2024,24 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       folded into the total they read as rows being dropped. */}
                   {(() => {
                     const offered = effective.filter(r => r.origin !== 'suggested' || acceptedRows.has(r.key)).length;
-                    const pending = effective.length - offered;
                     return (
                       <p className="text-[0.9375rem] font-semibold text-ink-900 tabular-nums">
                         {/* "will be imported" sat right above "need a value before they
                             can be imported" (5 Oct) — while any row is blocked the
                             headline says what has to happen first instead. */}
                         {included.length === offered ? plural(included.length, 'row') : `${included.length} of ${plural(offered, 'row')}`}{needFix > 0 ? ' · fill the missing values below to import them' : ' will be imported'}
-                        {pending > 0 && <span className="font-normal text-ink-500"> · {pending} more suggested by Ira below</span>}
                       </p>
                     );
                   })()}
                   <span className="text-[0.75rem] text-ink-500 tabular-nums">{plural(attributeCount, 'attribute')} · {plural(requiredFileCount, 'required file')}</span>
                   <div className="flex-1" />
+                  {/* Stage 8: the Flowchart's edit box, here too — beside the rows. */}
+                  {mode === 'sop' && (
+                    <button type="button" onClick={() => { setSourceFor(null); setReviewChat(o => !o); }} aria-expanded={reviewChat}
+                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                      <Sparkles size={13} className="text-brand-500" aria-hidden /> Edit with Ira
+                    </button>
+                  )}
                   {/* Brand, not amber. Ira filling a blank is help, and an amber
                       chip said "problem" about the one thing on this screen that
                       had already been dealt with. */}
@@ -2167,6 +2278,15 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                       title={row.sopRead === 'verbatim' ? 'Ira · written in the SOP word for word' : 'Ira · read between the lines of the SOP'} />
                                   )}
                                   {row.origin === 'sop' && <Pill tone="evidence">From the SOP{row.sectionRef ? ` · ${row.sectionRef}` : ''}</Pill>}
+                                  {/* Where it was read (stage 6): the page, with the
+                                      row's own words highlighted on it. */}
+                                  {row.origin === 'sop' && row.sourcePage && (
+                                    <button type="button" onClick={() => { setReviewChat(false); setSourceFor(row.key); }}
+                                      title={`See page ${row.sourcePage} of ${file.name}`} aria-label={`See page ${row.sourcePage} of the SOP`}
+                                      className="h-5 px-1.5 rounded-md border border-canvas-border bg-canvas font-mono text-[0.6875rem] text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                                      p.{row.sourcePage}
+                                    </button>
+                                  )}
                                   {row.origin === 'suggested' && <Pill tone="info">Suggested by Ira</Pill>}
                                   {row.origin === 'file' && <span className="font-mono text-[0.6875rem] text-ink-400">Row {row.rowNo}</span>}
                                   {/* The only per-row trace of a gap now — words, not a
@@ -2177,6 +2297,21 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     </span>
                                   )}
                                 </div>
+                                {/* The SOP's own "how to test" paragraph, folded
+                                    (stage 6). Reference, not the test procedure. */}
+                                {row.testGuidance && (
+                                  <div className="mt-1 ml-[1.15rem]">
+                                    <button type="button" onClick={() => setGuideOpen(prev => { const n = new Set(prev); if (n.has(row.key)) n.delete(row.key); else n.add(row.key); return n; })}
+                                      aria-expanded={guideOpen.has(row.key)}
+                                      className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">
+                                      <ChevronRight size={11} aria-hidden className={cn('transition-transform', guideOpen.has(row.key) && 'rotate-90')} />
+                                      How to test <span className="font-mono font-normal">(p.{row.testGuidance.page})</span>
+                                    </button>
+                                    {guideOpen.has(row.key) && (
+                                      <p className="mt-0.5 ml-3.5 text-[0.75rem] leading-snug text-ink-700 max-w-xl">{row.testGuidance.text}</p>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="tight">
                                 {/* The picker is gone from this cell. A select, a
@@ -2377,38 +2512,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   </table>
                 </div>
               )}
-
-              {/* ── Ira's suggestions, kept apart from what was read (#6) ──
-                  Controls the SOP never describes. Folded, and nothing here
-                  imports until it is added — then it joins the table above,
-                  still marked Suggested by Ira. */}
-              {iraExtras.length > 0 && (
-                <section className="mt-3 rounded-xl border border-canvas-border bg-canvas-elevated">
-                  <button type="button" onClick={() => setExtrasOpen(o => !o)} aria-expanded={extrasOpen} aria-controls="racm-import-ira-extras"
-                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-left text-[0.75rem] font-semibold text-ink-800 cursor-pointer">
-                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
-                    Ira suggests {plural(iraExtras.length, 'more control')} the SOP doesn’t describe
-                    <span className="font-normal text-ink-500">· not imported unless you add them</span>
-                    <ChevronDown size={12} aria-hidden className={cn('ml-auto text-ink-400 transition-transform', extrasOpen && 'rotate-180')} />
-                  </button>
-                  {extrasOpen && (
-                    <ul id="racm-import-ira-extras" className="px-3 pb-2">
-                      {iraExtras.map(r => (
-                        <li key={r.key} className="py-2 border-t border-canvas-border flex items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[0.8125rem] font-semibold text-ink-900 leading-snug">{cell(r.values.controlTitle) || cell(r.values.controlActivity)}</p>
-                            {cell(r.values.riskDescription) && <p className="mt-0.5 text-[0.75rem] text-ink-500 leading-snug line-clamp-2">Risk · {cell(r.values.riskDescription)}</p>}
-                          </div>
-                          <button type="button" onClick={() => setIncluded(r, true)} className={cn(quietBtn, 'shrink-0')}
-                            aria-label={`Add ${cell(r.values.controlTitle) || 'this control'} to the import`}>
-                            <Plus size={12} aria-hidden /> Add
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              )}
               </>
             </>
           )}
@@ -2500,10 +2603,54 @@ export default function RacmImportReview({ mode, file, process, entity, existing
           )}
         </div>
 
+        {/* The page a Review row was read from (stage 6) — a panel at the side,
+            so the row stays in view beside its source. Its risk and control are
+            highlighted on the first page, its "how to test" on the next. */}
+        {sourceFor && (() => {
+          const r = effective.find(x => x.key === sourceFor);
+          const first = r?.sourcePage ? sopPages.find(pg => pg.no === r.sourcePage) : undefined;
+          const test = r?.testGuidance ? sopPages.find(pg => pg.no === r.testGuidance!.page) : undefined;
+          if (!r || !first) return null;
+          return (
+            <aside role="dialog" aria-label={`Page ${first.no} of ${file.name}`}
+              className="fixed inset-y-0 right-0 z-[70] w-[30rem] max-w-full bg-canvas-elevated border-l border-canvas-border shadow-xl flex flex-col">
+              <div className="shrink-0 px-4 py-3 border-b border-canvas-border flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.8125rem] font-semibold text-ink-900">Where Ira read this</p>
+                  <p className="text-[0.75rem] text-ink-500 truncate">{file.name} · {test ? `pages ${first.no}–${test.no}` : `page ${first.no}`} · highlighted words are copied as written</p>
+                </div>
+                <button type="button" onClick={() => setSourceFor(null)} aria-label="Close the page"
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0"><X size={15} /></button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 space-y-3">
+                <SopPagePicture page={first} highlight={r.sourceLines ?? []} />
+                {test && test.no !== first.no && <SopPagePicture page={test} highlight={r.testGuidance?.lineIds ?? []} />}
+              </div>
+            </aside>
+          );
+        })()}
+
+        {/* Stage 8: "Edit with Ira" on Review — the Flowchart's edit box, in a
+            side panel so the rows stay in view as they change. */}
+        {step === 'review' && reviewChat && (
+          <aside role="dialog" aria-label="Edit with Ira"
+            className="fixed inset-y-0 right-0 z-[70] w-[24rem] max-w-full bg-canvas-elevated border-l border-canvas-border shadow-xl flex flex-col p-3">
+            {/* The box carries its own "Edit with Ira" heading; the close sits on it. */}
+            <button type="button" onClick={() => setReviewChat(false)} aria-label="Close the edit box"
+              className="absolute top-4 right-5 z-10 h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer"><X size={15} /></button>
+            <div className="flex-1 min-h-0">
+              <SopChartChat where="review" facts={chartFacts} onRenameRisk={renameRisk} onRenameControl={renameControl}
+                onLeaveOut={leaveOutRows} onRestore={restoreRows} onReextract={reextractRows} />
+            </div>
+          </aside>
+        )}
+
         {/* footer — always in view: the way back, and the one thing this step is for */}
         <div className="shrink-0 border-t border-canvas-border px-5 py-3 flex items-center gap-3">
-          {step === 'review' || step === 'flowchart' ? (
-            <button type="button" onClick={() => { setFillOpen(false); setStep(step === 'flowchart' ? 'prompt' : mode === 'racm' ? 'columns' : 'flowchart'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
+          {step === 'plan' ? (
+            <button type="button" onClick={() => setStep('reading')} disabled={extracting} className={cn(secondaryBtn, 'disabled:opacity-40 disabled:cursor-not-allowed')}><ArrowLeft size={13} /> Back</button>
+          ) : step === 'review' || step === 'flowchart' ? (
+            <button type="button" onClick={() => { setFillOpen(false); setStep(step === 'flowchart' ? 'plan' : mode === 'racm' ? 'columns' : 'flowchart'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
           ) : (
             <button type="button" onClick={onClose} disabled={extracting} className={cn(secondaryBtn, 'disabled:opacity-40 disabled:cursor-not-allowed')}>Cancel</button>
           )}
@@ -2531,10 +2678,18 @@ export default function RacmImportReview({ mode, file, process, entity, existing
             </>
           )}
 
-          {step === 'prompt' && (
+          {step === 'reading' && (!readingDone || unanswered > 0) && (
+            <span className="text-[0.75rem] text-ink-500">
+              {!readingDone ? 'Continue opens once Ira has read every page' : `Answer Ira’s ${unanswered === 1 ? 'question' : `${unanswered} questions`} to continue`}
+            </span>
+          )}
+          {step === 'reading' && (
+            <button type="button" onClick={() => setStep('plan')} disabled={!readingDone || unanswered > 0} className={primaryBtn}>Continue</button>
+          )}
+          {step === 'plan' && (
             <button type="button" onClick={validateAndExtract} disabled={extracting} className={primaryBtn}>
               {extracting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {extracting ? 'Extracting…' : 'Extract'}
+              {extracting ? 'Extracting…' : 'Confirm and extract'}
             </button>
           )}
 
@@ -2581,7 +2736,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               {/* The edit box can empty the chart from here, and then the
                   reader needs an account of why the button is off. */}
               {included.length === 0 && (
-                <span className="text-[0.75rem] text-mitigated-700">Nothing left on the chart — undo the last edit, or go back and change the prompt.</span>
+                <span className="text-[0.75rem] text-mitigated-700">Nothing left on the chart — undo the last edit, or go back and change your answers to Ira.</span>
               )}
               {/* Not gated on `canImport`. The blanks it counts — an owner, a
                   frequency — are the next screen's question, and holding this

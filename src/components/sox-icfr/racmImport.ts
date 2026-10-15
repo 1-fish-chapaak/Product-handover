@@ -523,6 +523,16 @@ export interface ImportRow {
    *  the SOP word for word, or read between its lines. Drives the tick's shape
    *  on Review — solid or outlined. SOP rows only; never on a suggestion. */
   sopRead?: 'verbatim' | 'inferred';
+  /** WHERE IN THE SOP THE ROW WAS READ (7 Oct, SOP extraction rework). The page
+   *  its risk and control sit on, and the ids of those lines in `sopPagesFor` —
+   *  whose text IS the row's text, word for word. Review draws the page with
+   *  these lines highlighted. SOP rows only. */
+  sourcePage?: number;
+  sourceLines?: string[];
+  /** The SOP's own "how to test" paragraph for this control, with where it sits.
+   *  Reference for the auditor and Ira — not the test procedure, which is still
+   *  built when the test runs. SOP rows only. */
+  testGuidance?: { text: string; page: number; lineIds: string[] };
   /** What Ira would put in a field the SOP does not state (agentic UX #6,
    *  1 Oct: extract only what is written). The row arrives with the field
    *  BLANK, so it lands in Missing values, and these are offered there as
@@ -993,7 +1003,7 @@ export function headerMapping(rows: string[][], headerRow: number, matches: Colu
 /** Rebuild one row from edited `values` (after fills, or a frequency picked in
  *  review), re-deriving everything else the same way buildImportRows does.
  *  `earlier` is the rows that come before it in the same import. */
-export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef' | 'sopRead' | 'iraGuesses'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef' | 'sopRead' | 'iraGuesses'> & Partial<Pick<ImportRow, 'sourcePage' | 'sourceLines' | 'testGuidance'>> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
 
   const attributeTexts = splitList(v.attributes ?? '');
@@ -1030,6 +1040,11 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
   if (base.sectionRef) row.sectionRef = base.sectionRef;
   if (base.sopRead) row.sopRead = base.sopRead;
   if (base.iraGuesses) row.iraGuesses = base.iraGuesses;
+  // Where the row was read stays with it through every edit — an edit changes
+  // the draft, not the page the SOP said it on.
+  if (base.sourcePage) row.sourcePage = base.sourcePage;
+  if (base.sourceLines) row.sourceLines = base.sourceLines;
+  if (base.testGuidance) row.testGuidance = base.testGuidance;
   if (freq.flag) row.frequencyFlag = freq.flag;
   if (nature.flag) row.natureFlag = nature.flag;
   if (type.flag) row.typeFlag = type.flag;
@@ -1665,6 +1680,10 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   if (country) control.country = country;
   const sopSectionRef = val('sopSectionRef');
   if (sopSectionRef) control.sopSectionRef = sopSectionRef;
+  // Where it was read and how the SOP says to test it travel with the control
+  // (stage 7), so the control page and Ira can point back at the page.
+  if (row.sourcePage) control.sopSource = { page: row.sourcePage, quote: activity || val('controlTitle') };
+  if (row.testGuidance) control.sopTestGuidance = { text: row.testGuidance.text, page: row.testGuidance.page };
   if (row.testingStrategy) control.testingStrategy = row.testingStrategy;
   if (Object.keys(row.extras).length) control.extras = { ...row.extras };
   return control;
@@ -1851,9 +1870,10 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
   const out: ImportRow[] = [];
 
   template.forEach((c, i) => {
-    // Point 7 of the prompt is what asks for these. Take it out and Ira stops
-    // offering controls the SOP never described.
-    const suggested = rules.suggestExtras && (i + offset) % 4 === 3;
+    // NO SUGGESTIONS (7 Oct, user's call): Ira extracts only what the SOP says,
+    // so it never offers a control the SOP did not describe — whatever point 7
+    // of the prompt says. Kept as a constant so the row shape is unchanged.
+    const suggested = false;
     let sectionRef: string | undefined;
     if (!suggested && rules.citeSections) {
       const minor = (perSection.get(c.subProcess) ?? 0) + 1;

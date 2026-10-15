@@ -43,7 +43,6 @@ function setField(obs: AtrWorkObs, field: ComplField, value: string): AtrWorkObs
   const ensurePlan = () => { if (next.actionPlans.length === 0) next.actionPlans = [{ text: '' }]; return next.actionPlans[0]; };
   switch (field) {
     case 'description': next.description = value; break;
-    case 'riskSummary': next.riskSummary = value; break;
     case 'classification': next.classification = (value || undefined) as AtrClassification; break;
     case 'risk': next.risk = (value || undefined) as AtrRisk; break;
     case 'recommendation': ensurePlan().text = value; break;
@@ -88,7 +87,7 @@ export default function AtrValidationStep({ observations, onChange }: {
   // Right-rail rollup (selected only).
   const sel = observations.filter(o => o.selected);
   const byRisk = { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not Applicable': 0 } as Record<AtrRisk, number>;
-  const byClass = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 } as Record<AtrClassification, number>;
+  const byClass = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0, Other: 0 } as Record<AtrClassification, number>;
   // Status is the most audit-critical dimension — how many findings are fully
   // remediated vs still open. 'Closed' surfaces as "Complete" for the reader.
   const byStatus = { Complete: 0, 'In Progress': 0, Open: 0, Overdue: 0 } as Record<string, number>;
@@ -199,7 +198,6 @@ export default function AtrValidationStep({ observations, onChange }: {
                           </div>
                         )}
                         <ViewField label="Description" value={o.description} />
-                        <ViewField label="Risk summary" value={o.riskSummary} />
                         {o.actionPlans.length > 0 && (
                           <div>
                             <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Action plans</div>

@@ -13,17 +13,18 @@ import {
   WifiOff, FileCheck2, FolderArchive, Settings2,
 } from 'lucide-react';
 import TemplatePreview from './TemplatePreview';
+import ConvertFormatView from './ConvertFormatView';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
-import NewReportModal, { type NewReportDraft } from './NewReportModal';
+import NewReportModal, { type NewReportDraft, type TemplateOption } from './NewReportModal';
 import type { ReportMeta } from './atr-upload/types';
 import AdminTab from './atr-upload/screens/AdminTab';
 import { AdminSettingsProvider } from './atr-upload/adminStore';
-import ObservationExceptionsAction from './atr-upload/components/ObservationExceptionsAction';
+import { observationExceptions } from './atr-upload/observationExceptions';
 import { UPLOAD_REPORT_ID_PREFIX, loadUploadSession } from './atr-upload/uploadedReport';
 import { useNotify } from '../../notifications/NotificationContext';
 import { ROSTER } from '../../notifications/triggers/caseTriggers';
@@ -41,11 +42,11 @@ import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
 import TemplateScopeModal from './TemplateScopeModal';
 import { templateScopeTag } from './templateScope';
-import { findEngagement } from '../../data/engagements';
+import { findEngagement, ENGAGEMENTS } from '../../data/engagements';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   reportKind, startReportDownload, oneDefaultOnly, REPORT_COL_W as COL_W,
-  renderedQueryCount, renderedSectionCount,
+  renderedQueryCount, renderedSectionCount, templateLineage, isStandardTemplate,
   type EditableTemplate, type GeneratedReport, templateCategoryLabel } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
@@ -252,12 +253,15 @@ function ReportsViewInner({
   // generated and its card is saved.
   const [newReportOpen, setNewReportOpen] = useState(false);
   const [atrInitialMeta, setAtrInitialMeta] = useState<Partial<ReportMeta> | undefined>(undefined);
+  // The format the wizard is writing in, so its review step asks only for the
+  // fields that format carries and the generated ATR comes out in its branding.
+  const [atrTemplateId, setAtrTemplateId] = useState<string | undefined>(undefined);
   // The draft behind an open wizard, so Back reopens New Report where it was.
   const [lastDraft, setLastDraft] = useState<NewReportDraft | null>(null);
   // "Edit observations" on a generated ATR opens the wizard straight on that
   // extracted report's observations.
   const [atrOpenSessionId, setAtrOpenSessionId] = useState<string | null>(null);
-  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience'] } | null>(null);
+  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience']; templateId?: string; description?: string } | null>(null);
   // When the wizard minimizes during extraction, present it as a small floating
   // toast so the rest of the app stays usable; otherwise it fills the screen.
   const [atrMinimized, setAtrMinimized] = useState(false);
@@ -316,6 +320,7 @@ function ReportsViewInner({
   // Clicking a template opens it as the page it produces — read the report
   // first, generate from there.
   const [previewTemplate, setPreviewTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  const [convertOpen, setConvertOpen] = useState(false);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
   // app, App.tsx owns the canonical list, so this branch stays empty to avoid
@@ -339,6 +344,17 @@ function ReportsViewInner({
     } catch { /* quota/private mode — customs stay session-only */ }
   }, [customTemplatesLocal]);
   const customTemplates = customTemplatesProp ?? customTemplatesLocal;
+  // Every format on the Templates tab, standard first. The New Report picker
+  // and the upload wizard both read this one list, so a format offered on the
+  // picker is always a format the wizard can resolve.
+  const allTemplates = useMemo<EditableTemplate[]>(
+    () => [...(REPORT_TEMPLATES as unknown as EditableTemplate[]), ...customTemplates as unknown as EditableTemplate[]],
+    [customTemplates],
+  );
+  const templateOptions = useMemo<TemplateOption[]>(
+    () => allTemplates.map(t => ({ id: t.id, name: t.name, desc: t.desc, baseId: t.baseId, custom: !isStandardTemplate(t.id) })),
+    [allTemplates],
+  );
   const addCustomTemplate = (t: EditableTemplate) => {
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
@@ -348,6 +364,9 @@ function ReportsViewInner({
     else setCustomTemplatesLocal(prev => prev.filter(t => t.id !== id));
   };
   const updateCustomTemplate = (t: EditableTemplate) => {
+    // A copy is handed to the editor without being stored, so the first save of
+    // one is a create. Anything already on the list overwrites in place.
+    if (!customTemplates.some(x => x.id === t.id)) { addCustomTemplateUnique(t, true); return; }
     if (onUpdateCustomTemplate) onUpdateCustomTemplate(t as typeof REPORT_TEMPLATES[number]);
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
@@ -842,7 +861,10 @@ function ReportsViewInner({
       const base = data.meta.reportName?.trim() || data.meta.auditTitle?.trim() || 'Action Taken Report';
       card = {
         id,
-        templateId: 'rt-007',
+        // The format this report was created in, so it prints the fields that
+        // format carries in its own branding. Falls back to the standard ATR
+        // for a report started before formats were linked.
+        templateId: newReportExtrasRef.current?.templateId ?? 'rt-007',
         kind: 'atr' as const,
         name: uniqueReportName(base),
         tag: 'Internal Audit' as const,
@@ -857,6 +879,7 @@ function ReportsViewInner({
         sourceReport: base,
         // Visibility from the New Report modal that started this.
         shareAudience: newReportExtrasRef.current?.audience,
+        desc: newReportExtrasRef.current?.description || undefined,
       } as unknown as GeneratedReport;
       newReportExtrasRef.current = null;
       const saved = card;
@@ -899,15 +922,18 @@ function ReportsViewInner({
   // saved to My Reports and opened.
   const createFromDraft = useCallback((draft: NewReportDraft) => {
     setNewReportOpen(false);
-    if (draft.templateId === 'rt-007') {
+    // Which journey a format runs is its lineage, not its id — a duplicate of
+    // the ATR is still an ATR however it was renamed.
+    const template = allTemplates.find(t => t.id === draft.templateId);
+    if (templateLineage(template) === 'atr') {
       setLastDraft(draft);
-      newReportExtrasRef.current = { audience: draft.audience };
+      newReportExtrasRef.current = { audience: draft.audience, templateId: draft.templateId, description: draft.description };
       setAtrInitialMeta(draft.meta);
+      setAtrTemplateId(draft.templateId);
       setAtrMinimized(false);
       setAtrUploadOpen(true);
       return;
     }
-    const template = REPORT_TEMPLATES.find(t => t.id === draft.templateId);
     const now = new Date();
     const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
     const sections = template?.sections ?? [];
@@ -932,6 +958,7 @@ function ReportsViewInner({
       generatedQueries: [],
       templateSections: sections,
       shareAudience: draft.audience,
+      desc: draft.description || undefined,
       reportPeriod: draft.meta.auditPeriod || undefined,
       coverDetails: Object.keys(coverDetails).length ? coverDetails : undefined,
     } as unknown as GeneratedReport;
@@ -946,7 +973,7 @@ function ReportsViewInner({
     setActiveTab('my-reports');
     setReportType('all');
     openReport(newReport);
-  }, [addToast, notify, openReport]);
+  }, [addToast, notify, openReport, allTemplates]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -1087,7 +1114,14 @@ function ReportsViewInner({
             setAtrMinimized(false);
             setAtrUploadOpen(true);
           } : undefined}
-          renderObservationActions={uploadSession ? (i, obs) => <ObservationExceptionsAction session={uploadSession} index={i} obs={obs} /> : undefined}
+          observationExceptions={uploadSession ? (i, obs) => {
+            const ex = observationExceptions(uploadSession, i, obs);
+            if (!ex) return null;
+            return {
+              count: ex.count,
+              open: () => logEvent({ action: 'Export', description: ex.handoff(), module: 'Reports', entity: 'Exception Case' }),
+            };
+          } : undefined}
           // Report Snapshot: curated library ATRs get a believable remediation
           // history to explore; ATRs the user generated start from their real
           // generated snapshot and grow only with real actions.
@@ -1133,14 +1167,40 @@ function ReportsViewInner({
     );
   }
 
-  // Template preview — the template as the page it produces.
-  if (previewTemplate) {
+  // New template → "Convert to a reference format" (staging's reports/convert).
+  // Converting hands the chosen parts and the uploaded reference report to the
+  // template editor, which reads the file's format.
+  if (convertOpen) {
+    return (
+      <ConvertFormatView
+        engagements={ENGAGEMENTS.map(e => ({ id: e.id, name: e.name }))}
+        reports={generatedReports.map(r => ({ id: String(r.id), name: reportDisplayName(r.name), queries: typeof r.queries === 'number' ? r.queries : undefined }))}
+        onBack={() => setConvertOpen(false)}
+        onConvert={({ parts, file, sourceName }) => {
+          const base = file.name.replace(/\.[^.]+$/, '');
+          const draft: EditableTemplate = {
+            ...(BLANK_TEMPLATE as EditableTemplate),
+            name: `${base} format`.slice(0, 60),
+            desc: `Format read from ${file.name}.`,
+            sourceFileName: file.name,
+            sections: parts.map(p => ({ name: p.name, icon: 'file-text', ...(p.text.trim() ? { description: p.text.trim() } : {}) })),
+          };
+          setConvertOpen(false);
+          setEditingTemplate(draft as typeof REPORT_TEMPLATES[number]);
+          addToast({ type: 'success', message: `Converting “${sourceName}” to the format of “${file.name}”. Import the file in the editor to read its pages.` });
+        }}
+      />
+    );
+  }
+
+  // Template preview — the template as the page it produces. Renders inside
+  // the Templates tab, under the page header and tabs (as staging does).
+  const templatePreviewEl = previewTemplate && (() => {
     const isCustom = customTemplates.some(t => t.id === previewTemplate.id);
     return (
       <TemplatePreview
         template={previewTemplate as EditableTemplate}
         isCustom={isCustom}
-        onBack={() => setPreviewTemplate(null)}
         onEdit={() => { setPreviewTemplate(null); setEditingTemplate(previewTemplate); }}
         onDuplicate={() => {
           // A copy carries the whole shape and branding, gets its own id, and
@@ -1149,18 +1209,21 @@ function ReportsViewInner({
             ...(previewTemplate as EditableTemplate),
             id: `ct-${Date.now()}`,
             name: `${previewTemplate.name} (copy)`,
+            // Remember the standard it came from. That is what decides which
+            // journey New Report runs and which badge the format wears, so
+            // renaming the copy can never change what it is. A copy of a copy
+            // keeps pointing at the original standard.
+            baseId: (previewTemplate as EditableTemplate).baseId ?? previewTemplate.id,
             // A copy starts unscoped: inheriting "the format all internal audit
             // reports use" would silently switch every report to the duplicate.
             isDefault: false,
             engagementId: undefined,
           };
           setPreviewTemplate(null);
-          // Edit the object that was actually stored. addCustomTemplateUnique
-          // renames on a collision, so opening `copy` showed a name the saved
-          // template did not have and saved a second clashing one.
-          const saved = addCustomTemplateUnique(copy, true);
-          setEditingTemplate(saved);
-          addToast({ type: 'success', message: `Copied “${previewTemplate.name}” as “${saved.name}”. Editing the copy now.` });
+          // The copy is not stored yet — it exists only in the editor until
+          // Save changes is pressed, so backing out leaves no stray template.
+          setEditingTemplate(copy as typeof REPORT_TEMPLATES[number]);
+          addToast({ type: 'info', message: `Editing a copy of “${previewTemplate.name}”. It is saved when you press Save changes.` });
         }}
         onDelete={() => {
           // The confirm dialog lives on the list page, so return there first.
@@ -1169,7 +1232,7 @@ function ReportsViewInner({
         }}
       />
     );
-  }
+  })();
 
   // Ids the active view exposes for multi-select (mirrors each list's
   // ReportNameCell `selectable` rule). Drives the bulk bar's Select all toggle.
@@ -1226,8 +1289,11 @@ function ReportsViewInner({
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6 min-w-0"
           >
-            <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
-            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+            <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
+              Reports · {activeTab === 'shared-reports' ? 'Shared Reports' : activeTab === 'templates' ? 'Templates' : activeTab === 'admin' ? 'Admin' : 'My Reports'}
+            </div>
+            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
+            <p className="text-[0.84375rem] text-text-secondary mt-1.5 max-w-2xl">
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
                 : activeTab === 'templates'
@@ -1245,7 +1311,7 @@ function ReportsViewInner({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-wrap gap-6 -mb-px">
+            className="flex flex-wrap gap-0 -mb-px">
           {([
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
@@ -1257,22 +1323,21 @@ function ReportsViewInner({
             return (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); if (tab.id === 'my-reports') setReportType('all'); }}
-                className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
-                  isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
+                onClick={() => { setActiveTab(tab.id); setPreviewTemplate(null); if (tab.id === 'my-reports') setReportType('all'); }}
+                className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  isActive ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
                 <span className="flex items-center gap-2">
                   <TabIcon size={14} />
                   {tab.label}
+                  {/* Count badge on the inactive tabs, as staging shows it. */}
+                  {!isActive && tab.count > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-paper-50 text-ink-500">
+                      {tab.count}
+                    </span>
+                  )}
                 </span>
-                {isActive && (
-                  <motion.div
-                    layoutId="reports-main-tab-underline"
-                    className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
-                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                  />
-                )}
               </button>
             );
           })}
@@ -1631,7 +1696,8 @@ function ReportsViewInner({
           </div>
         )}
 
-        {activeTab === 'templates' && (() => {
+        {activeTab === 'templates' && templatePreviewEl}
+        {activeTab === 'templates' && !templatePreviewEl && (() => {
           // Custom templates open straight into the editor (edit in place).
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
             setEditingTemplate(rt);
@@ -1695,10 +1761,10 @@ function ReportsViewInner({
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
                 {/* Where it may be used, in the words the save-time question
                     used. The plain case (any internal audit) says nothing. */}
-                {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
+                {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name ?? (rt as EditableTemplate).engagementName) && (
                   <p className="mt-2">
                     <Pill tone={(rt as EditableTemplate).isDefault ? 'info' : 'draft'}>
-                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}
+                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name ?? (rt as EditableTemplate).engagementName)}
                     </Pill>
                   </p>
                 )}
@@ -1771,12 +1837,12 @@ function ReportsViewInner({
                 <div className="shrink-0 flex items-center gap-3">
                   {/* Where this format is used, as a tag rather than a tail on
                       the description: on a row it is scanned, not read. */}
-                  {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
+                  {isCustom && templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name ?? (rt as EditableTemplate).engagementName) && (
                     <Pill tone={(rt as EditableTemplate).isDefault ? 'info' : 'draft'}>
-                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}
+                      {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name ?? (rt as EditableTemplate).engagementName)}
                     </Pill>
                   )}
-                  <span className={`hidden md:inline whitespace-nowrap text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{templateCategoryLabel(rt)}</span>
+                  <span className={`hidden md:inline w-[5.5rem] whitespace-nowrap text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{templateCategoryLabel(rt)}</span>
                   {/* No actions on the row: it opens the template, and Delete
                       lives inside it. */}
                 </div>
@@ -1808,7 +1874,7 @@ function ReportsViewInner({
           // editor already hosts "Import from a report" and one-tap recommended
           // Internal Audit sections, so no separate start-chooser step is needed.
           const templateToolbarActions = (
-            <button type="button" className={BTN_CTA_PRIMARY} onClick={() => setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number])}>
+            <button type="button" className={BTN_CTA_PRIMARY} onClick={() => setConvertOpen(true)}>
               <Plus size={14} /> New template
             </button>
           );
@@ -1839,7 +1905,7 @@ function ReportsViewInner({
                   so they stay put while the card galleries scroll underneath.
                   pb-7 is both the gap to the first gallery and the scroll
                   cushion, matching the space-y-7 between galleries below. */}
-              <div className="sticky top-0 z-20 -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-6 pt-6 pb-5 bg-canvas">
+              <div className="sticky top-0 z-20 -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-6 pt-6 pb-5 bg-white/95 backdrop-blur-sm">
                 <ListToolbar
                   search={templateSearch}
                   onSearch={setTemplateSearch}
@@ -1918,8 +1984,9 @@ function ReportsViewInner({
                   onMinimizedChange={setAtrMinimized}
                   onGenerated={saveUploadedAtr}
                   initialMeta={atrInitialMeta}
+                  templateId={atrTemplateId}
+                  templates={allTemplates}
                   initialSessionId={atrOpenSessionId ?? undefined}
-                  onBack={lastDraft ? () => { setAtrUploadOpen(false); setAtrMinimized(false); setNewReportOpen(true); } : undefined}
                 />
               </div>
             </motion.div>
@@ -1934,6 +2001,7 @@ function ReportsViewInner({
         onClose={() => setNewReportOpen(false)}
         onCreate={createFromDraft}
         nameTaken={reportNameTaken}
+        templates={templateOptions}
         initialDraft={lastDraft}
       />
 
@@ -1946,6 +2014,9 @@ function ReportsViewInner({
             // template's seeded state.
             key={editingTemplate.id}
             template={editingTemplate}
+            // Computed rather than tracked: a duplicate is handed over without
+            // being stored, and this is the only reliable way to know that.
+            unsaved={!customTemplates.some(t => t.id === editingTemplate.id)}
             // New templates open with an empty name field so the author must name
             // it — a shared "Untitled Template" default collided for everyone.
             // One that arrives with sections came from a report we read, so it

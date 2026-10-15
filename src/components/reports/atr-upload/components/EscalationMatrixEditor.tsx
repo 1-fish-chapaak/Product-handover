@@ -1,5 +1,5 @@
 import { useState, useMemo, type ReactNode } from 'react';
-import { Minus, Plus, RotateCcw, Trash2, BellRing, TriangleAlert, RefreshCw, Mail, CalendarClock, ShieldCheck, ChevronDown, Check, Users, ArrowLeft } from 'lucide-react';
+import { Minus, Plus, RotateCcw, Trash2, BellRing, TriangleAlert, Mail, CalendarClock, ShieldCheck, ChevronDown, Check, Users, ArrowLeft } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import DatePicker from '../../../shared/DatePicker';
 import EscalationTimeline from './EscalationTimeline';
@@ -203,7 +203,7 @@ export function EscalationCadenceEditor({ value: draft, onChange }: {
   const addEsc = () => patch({ escalations: [...draft.escalations, { offsetDays: 2, cc: ['emp-mgr', 'emp-hia'] }] });
   const removeEsc = (i: number) => patch({ escalations: draft.escalations.filter((_, idx) => idx !== i) });
 
-  const setRecurring = (p: Partial<EscalationMatrixConfig['recurring']>) => patch({ recurring: { ...draft.recurring, ...p } });
+
 
   const sampleDue = useMemo(() => parseDueDate(sampleISO), [sampleISO]);
   const schedule = useMemo(() => sampleDue ? computeEscalationSchedule(sampleDue, draft) : [], [sampleDue, draft]);
@@ -309,21 +309,6 @@ export function EscalationCadenceEditor({ value: draft, onChange }: {
                 </div>
               ))}
               {draft.escalations.length === 0 && <p className="text-[11.5px] text-ink-400">No escalations configured.</p>}
-            </div>
-          </div>
-
-          {/* recurring */}
-          <div className={`${CARD} ${dim}`}>
-            <SectionHead icon={RefreshCw} tint="bg-risk-50 text-risk-700" title="Recurring escalation" hint="After the last rung, keep chasing until the status is updated."
-              action={<Toggle checked={draft.recurring.enabled} onChange={v => setRecurring({ enabled: v })} label="Enable recurring escalation" />} />
-            <div className={draft.recurring.enabled ? '' : 'opacity-45 pointer-events-none'}>
-              <div className="flex items-center gap-2.5 mb-2.5">
-                <span className="text-[12px] text-ink-700">Repeat every</span>
-                <Stepper value={draft.recurring.everyDays} onChange={v => setRecurring({ everyDays: v })} min={1} max={30} suffix="d" />
-                <span className="text-[12px] text-ink-500">(incrementing the escalation number)</span>
-              </div>
-              <div className="text-[11px] font-semibold text-ink-500 mb-1.5">Cc recipients</div>
-              <EmployeePicker value={draft.recurring.cc} onChange={cc => setRecurring({ cc })} />
             </div>
           </div>
 

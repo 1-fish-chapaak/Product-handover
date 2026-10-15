@@ -1,23 +1,27 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, CalendarClock, Clock3, Link2, Paperclip, FileSpreadsheet, ListChecks, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, CalendarClock, Clock3, Link2, Paperclip, FileSpreadsheet, FileText, ListChecks, ChevronDown } from 'lucide-react';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import AtrDocument from './AtrDocument';
 import type { AtrReportData, AtrMeta, AtrObservation, AtrLinkedAnnexure } from './atrTypes';
 import type { AtrSectionKey } from './atrSections';
 import { computeExecSummary, exportAtrExcel } from './atrTemplate';
-import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
+import type { DownloadPreviewSection } from './ReportDownloadModal';
+import { exportReportPdfFile } from './reportPdf';
 import ReportDiscardDialog from './ReportDiscardDialog';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { useToast } from '../shared/Toast';
 import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
-import { loadTimeline, appendEvents, editEvent, annexureLinkedEvent, annexureUnlinkedEvent, replay, splitEvents, atrTimelineKey, fmtEventTime, type AtrTimeline, type TimelineSeed } from './atrTimeline';
-import AtrReportSnapshotPanel from './AtrReportSnapshotPanel';
+import { loadTimeline, appendEvents, editEvent, annexureLinkedEvent, annexureUnlinkedEvent, replay, splitEvents, atrTimelineKey, fmtEventTime, type AtrTimeline, type TimelineSeed, type AtrEvent } from './atrTimeline';
+import AtrReportSnapshotPanel, { SNAPSHOT_ANCHOR_ATTR } from './AtrReportSnapshotPanel';
+import AtrObservationCloseout, { type ExistingPlan } from './AtrObservationCloseout';
+import AtrObservationManageMenu, { type ObservationExceptionsEntry } from './AtrObservationManageMenu';
 import type { Audience } from '../shared/audience';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { reportGradient, type EditableTemplate } from './reportShared';
+import { reportGradient, reportAccent, type EditableTemplate } from './reportShared';
+import { templateHeaderFields, templateBodyFields, templateKpiFields, templateSummaryColumns, templateCarries } from './templateFields';
 
 // Summarize an edit into a version label by diffing the saved report against the
 // working draft — so the version trail reads from what actually changed rather
@@ -54,7 +58,7 @@ function diffObservation(prev: AtrObservation, next: AtrObservation): string[] {
   if ((prev.classification ?? '') !== (next.classification ?? '')) out.push(`classification → ${next.classification ?? '—'}`);
   if ((prev.exceptions ?? 0) !== (next.exceptions ?? 0)) out.push(`exceptions ${prev.exceptions ?? 0} → ${next.exceptions ?? 0}`);
   if ((prev.description ?? '') !== (next.description ?? '')) out.push('edited description');
-  if (changed(prev.process, next.process) || changed(prev.querySummary, next.querySummary) || changed(prev.riskSummary, next.riskSummary)) out.push('edited details');
+  if (changed(prev.process, next.process) || changed(prev.querySummary, next.querySummary)) out.push('edited details');
   const pa = prev.actionPlans ?? [], na = next.actionPlans ?? [];
   if (na.length > pa.length) out.push(`added ${na.length - pa.length} action plan${na.length - pa.length === 1 ? '' : 's'}`);
   else if (na.length < pa.length) out.push(`removed ${pa.length - na.length} action plan${pa.length - na.length === 1 ? '' : 's'}`);
@@ -104,13 +108,15 @@ interface AtrReport {
   atrData: AtrReportData;
   /** Format last applied from the command bar — restored when it reopens. */
   appliedTemplateId?: string;
+  /** The format the report was created in (the one picked in New Report). */
+  templateId?: string;
   shareAudience?: Audience;
 }
 
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare, onSave, onEditObservations, renderObservationActions, templates = REPORT_TEMPLATES, timelineSeed }: {
+export default function AtrReportView({ report, onBack, onShare, onSave, onEditObservations, observationExceptions, templates = REPORT_TEMPLATES, timelineSeed }: {
   report: AtrReport;
   onBack: () => void;
   /** Share — also where who-can-open lives, so the bar carries no visibility chip. */
@@ -126,7 +132,9 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
   /** Optional per-observation action slot, rendered in each observation card's
    *  header (e.g. the Manage Exceptions CTA on ATRs generated from an upload).
    *  Receives the 0-based index and the observation as currently rendered. */
-  renderObservationActions?: (index: number, obs: AtrObservation) => React.ReactNode;
+  /** The exception rows behind each observation, when the report was uploaded
+   *  with annexures — surfaced as the second entry in its Manage menu. */
+  observationExceptions?: (index: number, obs: AtrObservation) => ObservationExceptionsEntry | null;
   /** Report Snapshot seed: who prepared / audits / owns the risk, and whether to
    *  lay down the curated demo history (library ATRs) or start truthfully from
    *  the generated snapshot (user-generated ATRs). */
@@ -137,11 +145,16 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
   const [editMenuOpen, setEditMenuOpen] = useState(false);
-  // The template was chosen when the report was created; it only brands the
-  // banner here (no Apply Template control on an ATR).
+  // The format this report is written in: one applied later from the command
+  // bar wins, otherwise the one it was created from. It brands the banner and
+  // decides which fields print, so the report comes out as the format that was
+  // picked in New Report rather than as a generic ATR.
   const appliedTemplate = useMemo<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
-    () => (report.appliedTemplateId ? templates.find(t => t.id === report.appliedTemplateId) ?? null : null),
-    [report.appliedTemplateId, templates],
+    () => {
+      const id = report.appliedTemplateId ?? report.templateId;
+      return id ? templates.find(t => t.id === id) ?? null : null;
+    },
+    [report.appliedTemplateId, report.templateId, templates],
   );
   const { addToast } = useToast();
   // Save runs only after the user confirms.
@@ -221,6 +234,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
     }
     addToast({ type: 'success', message: added.length === 1 ? `“${added[0].name}” linked to ${obs.title}.` : `${added.length} annexures linked to ${obs.title}.` });
     setLinkingObs(null);
+  };
+  /** Close-out steps land on the timeline, exactly like a case action would. */
+  const applyCloseout = (events: AtrEvent[]) => {
+    // In memory for this page load only: nothing is written to storage and the
+    // saved report is left alone, so a hard refresh puts the panel — and the
+    // document it drives — back to the zero state it started from.
+    setTimeline(t => ({ ...t, events: [...t.events, ...events].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts)) }));
+    addToast({ type: 'success', message: events[events.length - 1].summary });
   };
   const unlinkAnnexure = (index: number, anx: AtrLinkedAnnexure) => {
     const obs = latest.observations[index];
@@ -318,45 +339,161 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
   const scrollToSection = (id: string) =>
     document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  // Which observation the close-out drawer is open on (index), or null.
+  const [closeoutObs, setCloseoutObs] = useState<number | null>(null);
+  // Every action plan already written elsewhere in this report, offered to the
+  // close-out panel so a fix can be reused rather than retyped.
+  const existingPlans = useMemo<ExistingPlan[]>(() => {
+    if (closeoutObs === null) return [];
+    return latest.observations.flatMap((o, k) => (k === closeoutObs ? [] : (o.actionPlans ?? [])
+      .filter(p => !p.closeout && (p.title?.trim() || p.text?.trim()))
+      .map(plan => ({ from: o.title || `Observation ${k + 1}`, plan }))));
+  }, [latest.observations, closeoutObs]);
+
+  const [downloading, setDownloading] = useState(false);
 
   // Map the ATR data onto the shared download-preview section model so the ATR
   // exports through the same modal (preview + PDF/DOCX/PPTX/HTML/Excel) as every
   // other report, instead of a bare window.print().
+  // The exported document carries the same fields as the report on screen: the
+  // format's own selection drives both. A format with no opinion exports
+  // everything, exactly as it did before formats carried field lists.
+  const hdrFields = templateHeaderFields(appliedTemplate as EditableTemplate | null);
+  const bodyFieldKeys = templateBodyFields(appliedTemplate as EditableTemplate | null);
+  const kpiFieldKeys = templateKpiFields(appliedTemplate as EditableTemplate | null);
+
   const buildDownloadSections = (): DownloadPreviewSection[] => {
     const ex = computeExecSummary(observations);
     const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
     const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
-    const stats = [
-      { label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
-      { label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
-      { label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
-      { label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
-      { label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
-      { label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },
-    ];
+    const stats = ([
+      { key: 'observations', label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
+      { key: undefined, label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
+      { key: 'actionPlans', label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
+      { key: 'obsOpen', label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
+      { key: 'obsClosed', label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
+      { key: 'obsPartial', label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },
+    ] as { key?: string; label: string; value: string; accent: string }[])
+      .filter(s => !s.key || templateCarries(kpiFieldKeys, s.key))
+      .map(({ label, value, accent }) => ({ label, value, accent }));
+
+    const detailLines = ([
+      ['reportName', 'Report Name', meta.reportName], ['reportNumber', 'Report Number', meta.reportNumber],
+      ['auditTitle', 'Audit Title', meta.auditTitle], ['auditEntity', 'Audit Entity', meta.auditEntity],
+      ['auditPeriod', 'Audit Period', meta.auditPeriod], ['financialYear', 'Financial Year', meta.financialYear],
+      ['section', 'Section', meta.section], ['reviewType', 'Review Type', meta.reviewType],
+      ['auditLocation', 'Audit Location', meta.auditLocation], ['region', 'Region', meta.region],
+      ['location', 'Location', meta.location], ['auditFunction', 'Function', meta.auditFunction],
+      ['auditSpoc', 'Audit SPOC', meta.auditSpoc], ['preparedBy', 'Prepared By', meta.preparedBy],
+      ['reviewedBy', 'Reviewed By', meta.reviewedBy], ['generatedOn', 'Generated On', meta.generatedOn],
+    ] as [string, string, string | undefined][])
+      .filter(([key, , v]) => !!v?.trim() && templateCarries(hdrFields, key))
+      .map(([, k, v]) => `${k}: ${v}`)
+      .join('\n');
+
     return [
-      {
+      ...(stats.length > 0 ? [{
         id: 'atr-exec',
-        kind: 'summary',
+        kind: 'summary' as const,
         title: 'Executive Summary',
         content: `${ex.totalObservations} observation${ex.totalObservations === 1 ? '' : 's'} carrying ${totalExceptions} exception${totalExceptions === 1 ? '' : 's'} across ${ex.totalActionPlans} action plan${ex.totalActionPlans === 1 ? '' : 's'}${ex.progressPct != null ? `, ${ex.progressPct}% remediated` : ''}.`,
         stats,
-      },
+      }] : []),
+      // The report details block, printed exactly as the reader sees it.
+      ...(detailLines ? [{
+        id: 'atr-details',
+        kind: 'note' as const,
+        title: 'Report Details',
+        content: detailLines,
+      }] : []),
+      // Every field the observation carries on screen goes into the export —
+      // a PDF that quietly drops the risk summary is not the same report — but
+      // a field the format does not carry is not on screen either, so it is not
+      // in the export.
       ...observations.map((o, i): DownloadPreviewSection => {
-        const apCount = o.actionPlans.length;
-        const apRoll = apCount
-          ? ` ${apCount} action plan${apCount === 1 ? '' : 's'}: ${o.actionPlans.map(p => p.title || p.text).filter(Boolean).join('; ')}.`
-          : '';
+        const has = (key: string) => templateCarries(bodyFieldKeys, key);
+        const line = (label: string, v?: string | number) =>
+          (v == null || String(v).trim() === '' ? null : `${label}: ${v}`);
+        const keyed = (key: string, label: string, v?: string | number) => (has(key) ? line(label, v) : null);
+        const head = [
+          line('Process', o.process), keyed('risk', 'Severity', o.risk),
+          keyed('classification', 'Classification', o.classification),
+          keyed('observationStatus', 'Status', o.status), line('Exceptions', o.exceptions),
+        ].filter(Boolean).join(' · ');
+        const anyPlanField = ['actionPlanTitle', 'actionTakenStatus', 'recommendation', 'actionTaken', 'verification', 'dueDate'].some(has);
+        const plans = anyPlanField
+          ? o.actionPlans.map((p, k) => {
+            const meta2 = [has('actionTakenStatus') && p.status, has('dueDate') && p.dueDate && `due ${p.dueDate}`].filter(Boolean).join(' · ');
+            return [
+              `Action Plan ${k + 1}${has('actionPlanTitle') && p.title ? ` — ${p.title}` : ''}${meta2 ? ` (${meta2})` : ''}`,
+              has('recommendation') ? p.text : null,
+              keyed('actionTaken', 'Action Taken', p.actionTaken),
+              line('Evidence', p.evidence),
+              keyed('verification', 'Verification', p.verification),
+            ].filter(Boolean).join('\n');
+          })
+          : [];
         return {
           id: `atr-obs-${i}`,
           kind: 'observation',
           obsId: `OBS-${String(i + 1).padStart(2, '0')}`,
           title: o.title,
-          description: `${o.description ?? ''}${apRoll}`.trim() || o.title,
+          description: [
+            head,
+            has('description') ? o.description : null,
+            line('Query Summary', o.querySummary),
+            keyed('rootCause', 'Root Cause', o.rootCause),
+            keyed('solutionType', 'Solution Type', o.solutionType),
+            keyed('riskImplications', 'Risk Implications', o.riskImplications),
+            has('riskImplicationsDetails') ? o.riskImplicationsDetails : null,
+            ...plans,
+          ].filter(Boolean).join('\n\n').trim() || o.title,
         };
       }),
     ];
+  };
+
+  // ── Download ── PDF and Excel are one click each from the toolbar menu; the
+  // modal stays for Word / PowerPoint / web and its preview.
+  // The exported file is this report, so it leaves in this report's own
+  // letterhead: the format's gradient and accent, its mark, its sign-off and
+  // closing pages. Without these a branded report exported in default purple.
+  const exportCtx = () => {
+    const t = appliedTemplate as EditableTemplate | null;
+    const brand = t?.brandColor ?? meta.brandColor;
+    return {
+      reportName: report.name,
+      reportTag: report.tag,
+      reportId: meta.reportId?.toUpperCase(),
+      templateName: t?.name,
+      generatedBy: report.generatedBy ?? meta.preparedBy ?? '—',
+      generatedAt: report.generatedAt ?? meta.generatedOn ?? '',
+      sections: buildDownloadSections(),
+      pageNumbers: t?.pageNumbers ?? true,
+      gradient: reportGradient(t?.theme, brand),
+      accent: reportAccent(t?.theme, brand),
+      brandColor: brand,
+      logoDataUrl: t?.logoDataUrl ?? meta.logoDataUrl,
+      signatories: t?.signoffEnabled ? t?.signatories : undefined,
+      closingText: t?.closingEnabled ? t?.closingText : undefined,
+    };
+  };
+  const downloadPdf = () => {
+    if (downloading) return;
+    setDownloading(true);
+    exportReportPdfFile(exportCtx())
+      .then(() => {
+        addToast({ type: 'success', message: `${report.name}.pdf downloaded.` });
+        setDownloadMenuOpen(false);
+      })
+      .catch(() => addToast({ type: 'error', message: 'The PDF could not be built. Reload and try again.' }))
+      .finally(() => setDownloading(false));
+  };
+  const downloadExcel = () => {
+    exportAtrExcel(meta, observations, { header: hdrFields, body: bodyFieldKeys, kpi: kpiFieldKeys });
+    addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
+    setDownloadMenuOpen(false);
   };
 
   return (
@@ -400,8 +537,11 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
                   created, visibility lives in Share, and case work happens in
                   Manage Exceptions — so none of those need a button here. */}
               <button
+                {...{ [SNAPSHOT_ANCHOR_ATTR]: true }}
                 onClick={() => (snapshotOpen ? closeSnapshot() : openSnapshot())}
                 aria-pressed={snapshotOpen}
+                aria-haspopup="dialog"
+                aria-expanded={snapshotOpen}
                 title="See the report, and every action taken on it, as of any moment"
                 className={`inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap border rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${snapshotOpen ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100' : 'text-ink-700 bg-canvas-elevated border-canvas-border hover:bg-canvas hover:border-ink-300/70'}`}
               >
@@ -459,12 +599,33 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
                   <Share2 size={14} /> Share
                 </button>
               )}
-              <button
-                onClick={() => setShowDownloadModal(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-              >
-                <Download size={14} /> Download
-              </button>
+              {/* Download — the two formats people actually ask for are one
+                  click each. */}
+              <div className="relative">
+                <button
+                  onClick={() => setDownloadMenuOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={downloadMenuOpen}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                >
+                  <Download size={14} /> Download <ChevronDown size={13} className={`transition-transform ${downloadMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                </button>
+                {downloadMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setDownloadMenuOpen(false)} />
+                    <div role="menu" className="absolute right-0 top-full mt-1.5 w-[300px] z-40 rounded-lg bg-canvas-elevated border border-canvas-border shadow-xl overflow-hidden py-1">
+                      <button role="menuitem" disabled={downloading} onClick={downloadPdf} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer disabled:opacity-60 disabled:cursor-wait">
+                        <FileText size={14} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+                        <span><span className="block text-[0.75rem] font-semibold text-ink-800">{downloading ? 'Preparing PDF…' : 'PDF'}</span><span className="block text-[0.6875rem] text-ink-500">The full report, ready to print or share</span></span>
+                      </button>
+                      <button role="menuitem" onClick={downloadExcel} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                        <FileSpreadsheet size={14} className="mt-0.5 shrink-0 text-compliant-700" aria-hidden="true" />
+                        <span><span className="block text-[0.75rem] font-semibold text-ink-800">Excel</span><span className="block text-[0.6875rem] text-ink-500">Observations and action plans as a spreadsheet</span></span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -573,7 +734,16 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
                       <Clock3 size={12} aria-hidden="true" /> {hit.n} action{hit.n === 1 ? '' : 's'} · {fmtEventTime(hit.last)}
                     </span>
                   )}
-                  {!timeTravelling && renderObservationActions?.(i, obs)}
+                  {/* One Manage menu: the observation's own close-out journey
+                      (assign → classify → act → verify), and the exception rows
+                      that rolled up into it. */}
+                  {!timeTravelling && !editing && (
+                    <AtrObservationManageMenu
+                      obs={obs}
+                      onObservation={() => setCloseoutObs(i)}
+                      exceptions={observationExceptions?.(i, obs)}
+                    />
+                  )}
                 </span>
               );
             }}
@@ -603,6 +773,12 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
                 </div>
               );
             }}
+            headerFields={templateHeaderFields(appliedTemplate as EditableTemplate | null)}
+            bodyFields={templateBodyFields(appliedTemplate as EditableTemplate | null)}
+            headerText={(appliedTemplate as EditableTemplate | null)?.headerText}
+            footerText={(appliedTemplate as EditableTemplate | null)?.footerText}
+            kpiFields={templateKpiFields(appliedTemplate as EditableTemplate | null)}
+            summaryColumns={templateSummaryColumns(appliedTemplate as EditableTemplate | null)}
             gradient={reportGradient(
               (appliedTemplate as EditableTemplate | null)?.theme,
               (appliedTemplate as EditableTemplate | null)?.brandColor,
@@ -610,10 +786,25 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
             logo={(appliedTemplate as EditableTemplate | null)?.logoDataUrl}
           />
         </div>
-        {snapshotOpen && (
-          <AtrReportSnapshotPanel timeline={timeline} asOf={asOf} onChange={setAsOf} onClose={closeSnapshot} />
-        )}
       </div>
+
+      {/* Report Snapshot — an anchored overlay, so opening it never re-flows
+          the document the reader is comparing against. */}
+      <AtrReportSnapshotPanel open={snapshotOpen} timeline={timeline} asOf={asOf} onChange={setAsOf} onClose={closeSnapshot} />
+
+      {/* Close-out — the per-observation assign → classify → act → verify
+          journey. Everything it does lands on the timeline, so the report and
+          the snapshot trail stay one story. */}
+      <AtrObservationCloseout
+        open={closeoutObs !== null}
+        index={closeoutObs ?? 0}
+        obs={closeoutObs !== null ? (observations[closeoutObs] ?? null) : null}
+        me={me}
+        timeline={timeline}
+        existingPlans={existingPlans}
+        onApply={applyCloseout}
+        onClose={() => setCloseoutObs(null)}
+      />
 
       {/* Link annexure → the platform's Add-data picker, portalled to the body. */}
       {createPortal(
@@ -630,21 +821,6 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
         </div>,
         document.body,
       )}
-
-      <AnimatePresence>
-        {showDownloadModal && (
-          <ReportDownloadModal
-            reportName={report.name}
-            reportTag={report.tag}
-            reportId={meta.reportId?.toUpperCase()}
-            generatedBy={report.generatedBy ?? meta.preparedBy ?? '—'}
-            generatedAt={report.generatedAt ?? meta.generatedOn ?? ''}
-            sections={buildDownloadSections()}
-            onExcelExport={() => exportAtrExcel(meta, observations)}
-            onClose={() => setShowDownloadModal(false)}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Review drawer — comments + version history for this saved ATR. */}
       <AnimatePresence>

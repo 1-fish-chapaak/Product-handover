@@ -26,6 +26,7 @@ import { ArrowLeft, FileText, FileUp, Sparkles, X } from 'lucide-react';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { FormSelect, type SelectOption } from '../shared/FilterSelect';
+import type { BackgroundSopDraft } from './sopBackgroundDrafts';
 import RacmImportReview, { type RacmImportMeta } from './RacmImportReview';
 import { guessHeaderRow, matchColumns, readRacmWorkbook } from './racmImport';
 import { addLibraryRacm, knownCompanies, racmLibrary, type LibraryRacm } from './racmLibrary';
@@ -141,6 +142,9 @@ function NameIt({ value, onChange, what, placeholder, onBackToList }: {
 }
 
 export interface CreateRacmFlowProps {
+  /** An SOP draft that finished in the background, reopened from its
+   *  notification (stage 5) — straight to its Flowchart, no chooser. */
+  resume?: BackgroundSopDraft;
   /** Set when the process is already decided (a Scope step row). */
   fixedProcess?: string;
   /** Pre-selected company — e.g. the in-scope company carrying most of the process. */
@@ -159,21 +163,21 @@ export interface CreateRacmFlowProps {
   onCreated: (racm: LibraryRacm) => void;
 }
 
-export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnCreate, onClose, onCreated }: CreateRacmFlowProps) {
+export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnCreate, onClose, onCreated, resume }: CreateRacmFlowProps) {
   const { currentUser } = useCurrentUser();
   const logEvent = useAuditLog();
   const groups = useMemo(() => knownCompanies(), []);
   const allCompanies = useMemo(() => groups.flatMap(g => g.companies), [groups]);
 
-  const [picked, setPicked] = useState<{ mode: 'racm' | 'sop'; file: File } | null>(null);
+  const [picked, setPicked] = useState<{ mode: 'racm' | 'sop'; file: File } | null>(resume ? { mode: 'sop', file: resume.file } : null);
   /** Entity and process are settled — hand over to the import wizard. */
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed, setConfirmed] = useState(!!resume);
 
   // Nothing is chosen for anybody: a company named here is one Ira read off the
   // file or one the auditor picked, never whichever happened to sort first.
-  const [entityChoice, setEntityChoice] = useState(defaultEntity ?? '');
+  const [entityChoice, setEntityChoice] = useState(resume?.entity ?? defaultEntity ?? '');
   const [typedEntity, setTypedEntity] = useState('');
-  const [processChoice, setProcessChoice] = useState(fixedProcess ?? '');
+  const [processChoice, setProcessChoice] = useState(resume?.process ?? fixedProcess ?? '');
   const [typedProcess, setTypedProcess] = useState('');
 
   const [reading, setReading] = useState(false);
@@ -263,7 +267,7 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
     return (
       <RacmImportReview mode={picked.mode} file={picked.file} process={process} entity={entity}
         existing={racmLibrary().flatMap(r => r.controls)}
-        onClose={onClose} onImport={save} />
+        onClose={onClose} onImport={save} {...(resume ? { resume: { answers: resume.answers } } : {})} />
     );
   }
 

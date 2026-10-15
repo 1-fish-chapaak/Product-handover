@@ -26,11 +26,11 @@ export type CompletenessStatus = 'Complete' | 'Partial' | 'Incomplete';
 
 export type MissingFieldState = 'missing' | 'filled-by-user' | 'skipped';
 
-/** The 10 ATR fields that extraction can flag as missing. Mirrors the keys in
+/** The ATR fields that extraction can flag as missing. Mirrors the keys in
  *  atrTemplate.ts REQUIRED_FIELDS so the resolver and the template stay aligned. */
 export type ExtractedFieldKey =
   | 'title' | 'description' | 'rootCause' | 'solutionType'
-  | 'riskSummary' | 'riskImplications' | 'riskImplicationsDetails'
+  | 'riskImplications' | 'riskImplicationsDetails'
   | 'recommendation' | 'actionTaken' | 'evidence' | 'verification'
   | 'classification' | 'risk' | 'dueDate';
 
@@ -125,6 +125,13 @@ export interface ExtractionSession {
   observations: ExtractedObservation[];
   annexures: ExtractedAnnexure[];
   meta: ReportMeta;
+  /** The report format picked in the New Report modal. A format built by
+   *  ticking fields in the template editor carries exactly those fields, so
+   *  this is what the extraction step reads to decide which report facts and
+   *  which observation fields it asks for — and what the generated ATR reads to
+   *  print the same set in the format's own branding. Absent on sessions
+   *  started before formats were linked; those show everything, as they did. */
+  templateId?: string;
   /** Set when the user chooses "Skip Annexures & Proceed" — disables the
    *  Manage-Exceptions path on the decision screen. */
   annexuresSkipped?: boolean;

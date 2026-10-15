@@ -21,6 +21,13 @@ export type ReportExportContext = {
   pageNumbers?: boolean;
   /** Custom brand colour (hex) — recolours the cover + accents. */
   brandColor?: string;
+  /** The report's cover gradient exactly as it is drawn on screen. A named
+   *  template theme is a pair of stops that no single hex reproduces, so it
+   *  travels as the pair and wins over `brandColor` when both are set.
+   *  Without it a themed report exported in the default purple. */
+  gradient?: [string, string];
+  /** The body accent (numbers, rules, table heads) that goes with it. */
+  accent?: string;
   /** Sign-off block: signatory slots + their manual sign state. */
   signatories?: SignatorySlot[];
   signoffs?: Record<string, Signoff>;
@@ -75,6 +82,10 @@ const sevColor = (sev: string) =>
 // Report palette derived from the template's brand colour. Falls back to the
 // default purple constants when no (valid) brand colour is set.
 function palette(ctx: ReportExportContext) {
+  // The exact on-screen stops win: they are what the reader is comparing against.
+  if (ctx.gradient) {
+    return { from: ctx.gradient[0], to: ctx.gradient[1], accent: ctx.accent ?? BRAND_DARK, byline: 'rgba(255,255,255,0.85)' };
+  }
   if (!isValidHexColor(ctx.brandColor)) {
     return { from: BANNER_FROM, to: BANNER_TO, accent: BRAND_DARK, byline: BANNER_BYLINE };
   }

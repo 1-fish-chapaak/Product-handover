@@ -1260,6 +1260,13 @@ export interface Control {
    *  import row since the required-column list was agreed, but it had nowhere
    *  to live on the control until 24 Sep, so it stopped at the preview. */
   sopSectionRef?: string;
+  /** WHERE IN THE SOP IT WAS READ (7 Oct, SOP extraction stage 7) — the page,
+   *  and the control's words as the SOP wrote them. Extracted controls only. */
+  sopSource?: { page: number; quote: string };
+  /** THE SOP'S OWN "HOW TO TEST THIS" paragraph, with its page. Reference for
+   *  the auditor and for Ira when it plans the test — not the test procedure,
+   *  which is still built when the test runs (6 Oct call). */
+  sopTestGuidance?: { text: string; page: number };
   /** THE RISK OWNER — the person accountable for the risk this control answers
    *  (22 Sep: a required RACM column). A record on the matrix only: it does not
    *  change who is sent tasks or requests — that "risk owner" lane is still the

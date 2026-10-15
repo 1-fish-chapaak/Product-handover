@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Check, X, CloudUpload, Loader2, ArrowLeft } from 'lucide-react';
+import { Check, X, CloudUpload, Loader2 } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { useAdminSettings } from './adminStore';
 import { seedSession, seedEmptySession, PROCESSING_MESSAGES, PROCESSING_DURATION_MS } from './mockExtraction';
@@ -9,8 +9,9 @@ import { useAuditLog } from '../../../context/AdminDataContext';
 import { FooterSlotContext } from './footerSlot';
 import { AtrModalHostContext, type AtrModalHost } from './atrModalHost';
 import EscalationMatrixEditor from './components/EscalationMatrixEditor';
-import type { WizardStage, UploadedFile, UploadMethod, ReportMeta } from './types';
+import type { WizardStage, UploadedFile, UploadMethod, ReportMeta, ExtractionSession } from './types';
 import type { AtrReportData } from '../atrTypes';
+import type { TemplateFieldSource } from '../templateFields';
 import { stripExt } from './reportFields';
 import type { EscalationMatrixConfig } from './escalationMatrix';
 import Step1MethodSelect from './screens/Step1MethodSelect';
@@ -109,14 +110,20 @@ export interface AtrUploadTabProps {
    *  cover facts). They print on the ATR cover, so the upload step does not ask
    *  for them again; `reportName` names the extracted report and its ATR. */
   initialMeta?: Partial<ReportMeta>;
-  /** Back to the New Report modal (the details step) — shown on the Upload tab. */
-  onBack?: () => void;
+  /** The report format picked in the New Report modal. Recorded on the session
+   *  so the review step asks only for the fields that format carries. */
+  templateId?: string;
+  /** Every report format on the Templates tab, standard and custom. The host
+   *  owns both lists; the wizard only looks one up by the id its session
+   *  carries, so resuming an older report reads its own format, not whichever
+   *  one was picked last. */
+  templates?: TemplateFieldSource[];
   /** Open straight on this extracted report's observations (Observations
    *  Extracted → detail) — "Edit observations" from a generated ATR. */
   initialSessionId?: string;
 }
 
-function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, onBack, initialSessionId }: AtrUploadTabProps) {
+function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, templateId, templates, initialSessionId }: AtrUploadTabProps) {
   const { state, setMethod, addSession, selectSession, updateSession, goTo } = useAtrUpload();
   // The org-wide default escalation matrix (configured in Reports → Admin) is
   // applied to every newly-extracted report. `addLog` records each change to the
@@ -223,9 +230,13 @@ function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, 
     // The escalation cadence comes from the Admin default, not per-upload.
     const escalation = adminEscalation;
     const empty = /empty|blank/.test(name);
-    const session = empty
+    const seeded = empty
       ? seedEmptySession(toUploadedFile(file), method, metaWithName, escalation)
       : seedSession(toUploadedFile(file), method, annexures.map(toUploadedFile), metaWithName, escalation);
+    // The format picked in the New Report modal travels with the session, so
+    // the review step asks only for the fields that format prints and the
+    // generated ATR comes out in its branding.
+    const session: ExtractionSession = { ...seeded, templateId };
     addSession(session);
     setVisitSessionId(session.id);
     const obsN = session.observations.length;
@@ -312,6 +323,13 @@ function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, 
   // Step 2 is only ever this visit's report.
   const hasReport = !!state.session && !!visitSessionId && state.session.id === visitSessionId;
   const summaryDetail = onReportStage && hasReport;
+  // The format this report is being written in. The session's own id wins, so
+  // reopening an older report reads the format it was created with; the prop is
+  // the fallback for a session seeded before the id was recorded.
+  const sessionTemplate = useMemo(
+    () => templates?.find(t => t.id === (state.session?.templateId ?? templateId)) ?? null,
+    [templates, state.session?.templateId, templateId],
+  );
 
   if (minimized) {
     const done = state.stage !== 'processing';
@@ -366,11 +384,6 @@ function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, 
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {onBack && onUploadStage && (
-                <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" title="Back to the report details">
-                  <ArrowLeft size={14} aria-hidden="true" /> Back
-                </button>
-              )}
               {onClose && (
                 <button onClick={requestClose} className="w-8 h-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={18} /></button>
               )}
@@ -403,7 +416,7 @@ function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, 
           )}
           {state.stage === 'processing' && <Step3Processing progress={progress} step={step} />}
           {summaryDetail && (
-            <ReportDetailView onGenerate={generateAtr} onViewAtr={viewAtr} onRegenerate={regenerateAtr} onSaveDraft={saveDraft} />
+            <ReportDetailView onGenerate={generateAtr} onViewAtr={viewAtr} onRegenerate={regenerateAtr} onSaveDraft={saveDraft} template={sessionTemplate} />
           )}
         </div>
 

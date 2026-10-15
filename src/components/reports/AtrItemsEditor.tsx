@@ -129,10 +129,6 @@ export default function AtrItemsEditor({ observations, onChange }: {
               <label className={LABEL}>Description</label>
               <textarea value={obs.description ?? ''} onChange={e => patchObs(oIdx, { description: e.target.value || undefined })} placeholder="What was observed / the issue." rows={2} className={`${INPUT} resize-y`} />
             </div>
-            <div>
-              <label className={LABEL}>Risk summary</label>
-              <textarea value={obs.riskSummary ?? ''} onChange={e => patchObs(oIdx, { riskSummary: e.target.value || undefined })} placeholder="The risk this exposes." rows={2} className={`${INPUT} resize-y`} />
-            </div>
 
             {/* Action plans */}
             <div className="pt-1">

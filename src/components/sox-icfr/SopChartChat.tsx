@@ -35,7 +35,9 @@ import { readChartEdits, type ChartFacts } from './sopChartEdits';
 /** What Undo has to know to put one edit back. */
 type UndoSpec =
   | { kind: 'rename'; what: 'risk' | 'control'; ref: string; from: string; to: string }
-  | { kind: 'restore'; rowKeys: string[] };
+  | { kind: 'restore'; rowKeys: string[] }
+  /** A re-extraction — the parent hands back how to put the rows as they were. */
+  | { kind: 'callback'; run: () => void };
 
 interface Receipt {
   id: number;
@@ -62,16 +64,29 @@ export interface SopChartChatProps {
   onLeaveOut: (rowKeys: string[]) => { moved: string[]; left: number };
   /** Ticks rows back in — the Matrix's own door, reached from here. */
   onRestore: (rowKeys: string[]) => void;
+  /** Where the box sits — the Flowchart, or Review's side panel (stage 8). */
+  where?: 'chart' | 'review';
+  /** "Extract these again" (stage 8): read the rows back from the SOP — its own
+   *  words return, the reviewer's filled-in blanks stay. Review only. */
+  onReextract?: (rowKeys: string[]) => { count: number; undo: () => void };
 }
+
+const OPENING_REVIEW =
+  'Tell me what to change in these rows. I can rename, take a row out, narrow the list, or read rows again from the SOP — "extract control 4 again", "manual controls dobara nikaal do", "remove control 2".';
+
+/** "Extract … again" in the words a reviewer uses — English or Hinglish. */
+const EXTRACT_VERB = /\b(re-?extract|extract|nikaal|nikal|read)\w*/gi;
+const AGAIN = /\b(again|dobara|phir se|once more|fresh)\b|re-?extract/i;
 
 const OPENING =
   'Tell me what to change and I\'ll change it on the chart. I can rename a box, take one out, or narrow the whole thing — "rename the first risk to Vendor fraud", "remove control 4", "only key controls" (Hinglish works too: "Control 4 hata do").';
 
 /** Offered until the reviewer has said something of their own. */
 const OPENERS = ['sirf key controls rakho', 'manual controls hata do', 'at most 6 controls'];
+const OPENERS_REVIEW = ['extract control 1 again', 'manual controls dobara nikaal do', 'remove control 2'];
 
-export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onLeaveOut, onRestore }: SopChartChatProps) {
-  const [msgs, setMsgs] = useState<Msg[]>([{ id: 0, who: 'ira', text: OPENING }]);
+export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onLeaveOut, onRestore, where = 'chart', onReextract }: SopChartChatProps) {
+  const [msgs, setMsgs] = useState<Msg[]>([{ id: 0, who: 'ira', text: where === 'review' ? OPENING_REVIEW : OPENING }]);
   const [draft, setDraft] = useState('');
   const [undone, setUndone] = useState<Set<number>>(new Set());
   const nextId = useRef(1);
@@ -82,6 +97,23 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
   const send = useCallback((raw: string) => {
     const text = raw.trim();
     if (!text) return;
+    // "Extract … again" (stage 8). Which rows it means is read by the same
+    // reader as a removal — the extract verb is swapped for "remove" so
+    // "control 4", "manual controls", "risk 2" all resolve the way they do
+    // everywhere else. Nothing named means every row on the list.
+    if (onReextract && AGAIN.test(text) && new RegExp(EXTRACT_VERB.source, 'i').test(text)) {
+      const asRemoval = text.replace(EXTRACT_VERB, 'remove').replace(/\b(again|dobara|phir se|once more|fresh)\b/gi, ' ');
+      const named = readChartEdits(asRemoval, facts).flatMap(e => (e.kind === 'leave-out' ? e.rowKeys : []));
+      const keys = named.length ? Array.from(new Set(named)) : facts.rows.map(r => r.key);
+      const { count, undo } = onReextract(keys);
+      setMsgs(prev => [...prev, { id: nextId.current++, who: 'user', text }, {
+        id: nextId.current++, who: 'ira',
+        text: count ? `Read ${count === 1 ? 'that control' : `${count} controls`} again from the SOP — the SOP’s own words are back; what you filled in stays.` : 'Nothing to read again — those rows already say what the SOP says.',
+        ...(count ? { receipts: [{ id: nextId.current++, text: `${count} ${count === 1 ? 'row' : 'rows'} read again from the SOP`, undo: { kind: 'callback' as const, run: undo } }] } : {}),
+      }]);
+      setDraft('');
+      return;
+    }
     // One message can ask for two things. `readChartEdits` has already refused
     // the whole message if either half was unreadable.
     const edits = readChartEdits(text, facts);
@@ -126,14 +158,14 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
         who: 'ira',
         text: moved.length === 0 && !renamed
           ? 'Nothing moved — everything you asked for is already left out.'
-          : left >= 0 ? `Done — ${left} ${left === 1 ? 'control' : 'controls'} left on the chart.` : 'Done.',
+          : left >= 0 ? `Done — ${left} ${left === 1 ? 'control' : 'controls'} left ${where === 'review' ? 'in the list' : 'on the chart'}.` : 'Done.',
         receipts,
       });
     }
 
     setMsgs(prev => [...prev, ...said]);
     setDraft('');
-  }, [facts, onRenameRisk, onRenameControl, onLeaveOut]);
+  }, [facts, onRenameRisk, onRenameControl, onLeaveOut, onReextract, where]);
 
   const runUndo = useCallback((r: Receipt) => {
     if (!r.undo) return;
@@ -142,6 +174,8 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
       // reads the title it was first filed under.
       if (r.undo.what === 'risk') onRenameRisk(r.undo.ref, r.undo.from);
       else onRenameControl(r.undo.ref, r.undo.from, r.undo.to);
+    } else if (r.undo.kind === 'callback') {
+      r.undo.run();
     } else {
       onRestore(r.undo.rowKeys);
     }
@@ -205,7 +239,7 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
           )))}
           {msgs.length === 1 && (
             <div className="flex flex-wrap gap-1.5">
-              {OPENERS.map(o => (
+              {(where === 'review' ? OPENERS_REVIEW : OPENERS).map(o => (
                 <button key={o} type="button" onClick={() => send(o)}
                   className="inline-flex items-center h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-medium text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
                   {o}
@@ -219,7 +253,7 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
 
       <div className="p-2.5 border-t border-canvas-border shrink-0">
         <div className="ai-border">
-          <textarea rows={2} value={draft} aria-label="Tell Ira what to change on the chart"
+          <textarea rows={2} value={draft} aria-label={where === 'review' ? 'Tell Ira what to change in the rows' : 'Tell Ira what to change on the chart'}
             placeholder="What should change?"
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {

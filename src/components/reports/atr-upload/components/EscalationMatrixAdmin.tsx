@@ -158,9 +158,22 @@ function HowItWorks({ cfg, severityLabel }: { cfg: EscalationMatrixConfig; sever
  * different one for each. A collapsible explainer shows how the triggers work
  * before the user configures anything.
  */
-export default function EscalationMatrixAdmin({ value, onSave }: {
+export default function EscalationMatrixAdmin({ value, onSave, header, intro, introDirty, onSaveIntro, onDiscardIntro }: {
   value: EscalationMatrixSet;
   onSave: (next: EscalationMatrixSet) => void;
+  /** Rendered at the top of the body, above the cadence. Lets a caller put
+   *  everything about one policy on a single screen. */
+  intro?: React.ReactNode;
+  /** The intro has unsaved edits of its own. One screen means one Save, so it
+   *  arms the same footer this editor owns. */
+  introDirty?: boolean;
+  /** Commit / throw away whatever the intro is holding, alongside the cadence. */
+  onSaveIntro?: () => void;
+  onDiscardIntro?: () => void;
+  /** Replaces the generic "Escalation Matrix" title, so a caller that already
+   *  names the matrix it is editing gets one header row, not two. The explainer
+   *  toggle stays on the right of whatever is passed. */
+  header?: React.ReactNode;
 }) {
   const [draft, setDraft] = useState<EscalationMatrixSet>(() => JSON.parse(JSON.stringify(value)));
   const [severity, setSeverity] = useState<EscalationSeverity>('Critical');
@@ -209,19 +222,23 @@ export default function EscalationMatrixAdmin({ value, onSave }: {
     <div className="flex flex-col h-full min-h-0 bg-canvas-elevated">
       {/* Header */}
       <header className="shrink-0 flex items-center gap-3 px-6 pt-4 pb-3 border-b border-canvas-border">
-        <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={16} /></div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Escalation Matrix</h2>
-          <p className="text-[0.75rem] text-ink-500 leading-snug">The reminder &amp; escalation cadence that chases every open exception — set per observation severity.</p>
-        </div>
+        {header ? <div className="min-w-0 flex-1">{header}</div> : (
+          <>
+            <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={16} /></div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Escalation Matrix</h2>
+            </div>
+          </>
+        )}
         <button type="button" onClick={toggleExplainer} aria-expanded={explainerOpen} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer">
           {explainerOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-          {explainerOpen ? 'Hide how it works' : 'Show how it works'}
+          {explainerOpen ? 'Hide how escalation flow works' : 'Show how escalation flow works'}
         </button>
       </header>
 
       {/* Body */}
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+        {intro}
         <AnimatePresence initial={false}>
           {explainerOpen && (
             <motion.div key="explainer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }} className="overflow-hidden">
@@ -334,8 +351,10 @@ export default function EscalationMatrixAdmin({ value, onSave }: {
             : `Same for all severities · ${summarizeMatrix(draft.all)}`}
         </p>
         <div className="flex-1" />
-        <Button variant="outline" size="md" disabled={!dirty} onClick={() => setDraft(JSON.parse(JSON.stringify(value)))}>Discard changes</Button>
-        <Button variant="primary" size="md" disabled={!dirty} onClick={() => onSave(draft)}>Save escalation matrix</Button>
+        <Button variant="outline" size="md" disabled={!dirty && !introDirty}
+          onClick={() => { setDraft(JSON.parse(JSON.stringify(value))); onDiscardIntro?.(); }}>Discard changes</Button>
+        <Button variant="primary" size="md" disabled={!dirty && !introDirty}
+          onClick={() => { if (dirty) onSave(draft); onSaveIntro?.(); }}>Save</Button>
       </footer>
     </div>
   );

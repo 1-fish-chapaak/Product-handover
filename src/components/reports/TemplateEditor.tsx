@@ -6,11 +6,11 @@
 //  components, keeping React Fast Refresh intact.)
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
 
-import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
+import { Fragment, useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Check, ChevronRight, FileText, GripVertical,
+  Check, ChevronDown, ChevronRight, FileText,
   Loader2, Plus, X, Pencil, ShieldCheck, Trash2,
   BookOpen, Search, Upload, Maximize2, Minimize2,
   UploadCloud, AlertTriangle, ArrowRight,
@@ -18,12 +18,12 @@ import {
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { ReportBrandBanner, ReportSignoffBlock, ReportClosingBlock } from './ReportDocumentChrome';
+import { ReportNumberedHeading, ReportBrandBanner, ReportSignoffBlock, ReportClosingBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
   ICON_MAP, CATEGORY_COLORS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
-  sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
-  collectBlockLibrary, DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText,
+  DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
+  DEFAULT_TEMPLATE_BRAND, DEFAULT_THEME, defaultFooterText,
   LETTERHEAD_SOFT_MAX, letterheadLine, templateCoverFields,
   proposeScaleMap, unusedScaleWords, OUR_SCALE,
   type EditableTemplate, type WatermarkConfig, type ScaleMap,
@@ -34,8 +34,6 @@ import SectionReviewCanvas from './SectionReviewCanvas';
 import { findEngagement } from '../../data/engagements';
 import { templateScopeLine } from './templateScope';
 import { FormSelect } from '../shared/FilterSelect';
-import { RowDeleteButton } from './RowDeleteButton';
-import { renderSectionShape, sectionTypeLabel, type ShapeFill } from './templateSectionShape';
 import { reviewChrome, belowTheReadFloor, type CanvasSection, type CanvasBlock } from './sectionReviewShared';
 import { useAuditLog } from '../../context/AdminDataContext';
 
@@ -537,188 +535,177 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 // direction — on release it snaps to the slot nearest the drop point), and a
 // hover control removes it. Reordering drives the same `sections` state.
 
-function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe, blockLibrary, fill }: {
-  section: TemplateSection;
-  index: number;
-  onMove: (from: number, to: number) => void;
-  listRef: React.RefObject<HTMLDivElement | null>;
-  onDelete: () => void;
-  onRename: (name: string) => void;
-  onDescribe: (description: string) => void;
-  /** Blocks the template stores by id, so a placement resolves to its shape. */
-  blockLibrary?: Record<string, TemplateBlock>;
-  /** Made-up problems to draw the shapes with, when the preview is switched to
-   *  show a filled report rather than an empty shape. */
-  fill?: ShapeFill;
+import {
+  HEADER_FIELD_CHOICES, BODY_FIELD_CHOICES, KPI_CHOICES, SUMMARY_COLUMN_CHOICES,
+  DEFAULT_HEADER_FIELDS, DEFAULT_BODY_FIELDS, DEFAULT_KPI_FIELDS, DEFAULT_SUMMARY_COLUMNS,
+  SAMPLE_HEADER, SAMPLE_BODY, SAMPLE_ROWS, CELL_TONE,
+} from './templateFields';
+
+function FieldGroup({ title, hint, choices, picked, onToggle, disabled, nested }: {
+  title: string;
+  hint: string;
+  choices: { key: string; label: string; note?: string }[];
+  picked: string[];
+  onToggle: (key: string) => void;
+  disabled?: boolean;
+  /** A group inside another group reads one level quieter. */
+  nested?: boolean;
 }) {
-  // BYOT sections carry typed blocks — their body renders through the shared
-  // shape renderer, and the chip says where the content comes from (fill case).
-  const typeLabel = sectionTypeLabel(section);
-  const controls = useDragControls();
-  // Inline rename — a local draft keeps the field stable while typing (the parent
-  // only hears the new name on commit), then Enter/blur saves and Escape reverts.
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(section.name);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const startEdit = () => { setDraft(section.name); setEditing(true); requestAnimationFrame(() => inputRef.current?.select()); };
-  const commitEdit = () => {
-    const name = draft.trim();
-    setEditing(false);
-    if (name && name !== section.name) onRename(name);
-  };
-  // The description (body blurb) is editable too: it falls back to the auto blurb
-  // until the author types their own, then persists on the section. Same inline
-  // draft-then-commit pattern as the name.
-  const fallbackDesc = sectionBlurb(section.name);
-  const shownDesc = section.description ?? fallbackDesc;
-  const [editingDesc, setEditingDesc] = useState(false);
-  const [descDraft, setDescDraft] = useState(shownDesc);
-  const descRef = useRef<HTMLTextAreaElement>(null);
-  // The hover controls float over the heading row, so the row has to reserve
-  // their width. Armed, the trash becomes a "✓ Remove" pill roughly twice as
-  // wide, which was landing on top of the fill tag ("Fills from audit results")
-  // and the tail of a long heading. The row gives the extra width back while it
-  // is armed instead.
-  const [armed, setArmed] = useState(false);
-  const startDescEdit = () => { setDescDraft(section.description ?? fallbackDesc); setEditingDesc(true); requestAnimationFrame(() => descRef.current?.select()); };
-  const commitDesc = () => {
-    const next = descDraft.trim();
-    setEditingDesc(false);
-    // Store only a real override; clearing back to the auto blurb drops it.
-    if (next && next !== fallbackDesc) onDescribe(next);
-    else if (!next || next === fallbackDesc) onDescribe('');
-  };
-  // The pencil edits BOTH at once: open the heading (focused) and the description
-  // together. The description opens WITHOUT taking focus — otherwise moving focus
-  // onto the heading blurs the textarea, fires commitDesc, and closes it (leaving
-  // only the heading editable). Double-click still edits each field on its own.
-  const startEditBoth = () => {
-    setDescDraft(section.description ?? fallbackDesc);
-    setEditingDesc(true);
-    startEdit();
-  };
-  // The body placeholder — null for a plain prose section, where the editable
-  // description takes its place.
-  const shape = renderSectionShape(section, blockLibrary, shownDesc, fill);
+  const [open, setOpen] = useState(true);
+  const all = choices.every(c => picked.includes(c.key));
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
-      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-      drag
-      dragSnapToOrigin
-      dragElastic={0.2}
-      dragControls={controls}
-      dragListener={false}
-      whileDrag={{ scale: 1.01, zIndex: 50, boxShadow: '0 12px 30px rgba(15,8,30,0.16)' }}
-      onDragEnd={(_, info) => {
-        // Reorder by where the block was dropped: count how many *other* blocks
-        // sit above the drop point → that's the new insertion index.
-        const rows = listRef.current ? (Array.from(listRef.current.children) as HTMLElement[]) : [];
-        const y = info.point.y;
-        let target = 0;
-        rows.forEach((r, ri) => {
-          if (ri === index) return;
-          const rect = r.getBoundingClientRect();
-          if (y > rect.top + rect.height / 2) target += 1;
-        });
-        onMove(index, target);
-      }}
-      className="group relative border-x border-canvas-border bg-white px-9 py-6 transition-colors hover:bg-canvas/20"
-    >
-      {/* Drag grip — sits in the left margin, revealed on hover. */}
-      <button
-        onPointerDown={(e) => controls.start(e)}
-        aria-label={`Drag ${section.name} to reorder`}
-        className="no-focus-ring absolute left-2.5 top-6 text-ink-300 hover:text-brand-600 cursor-grab active:cursor-grabbing touch-none opacity-0 group-hover:opacity-100 transition-all"
-      >
-        <GripVertical size={15} />
-      </button>
-      {/* Edit + remove — revealed on hover, top-right. */}
-      {/* Armed keeps the cluster on screen even if the pointer wanders off the
-          section, so the confirm the click asked for is still there to press. */}
-      <div className={`absolute right-4 top-5 flex items-center gap-0.5 transition-all ${armed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+    <section className={nested ? 'mb-3' : 'mb-5'}>
+      <div className="flex items-baseline justify-between gap-2 mb-1">
         <button
-          onClick={startEditBoth}
-          aria-label={`Edit ${section.name}`}
-          title="Edit heading and description"
-          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="inline-flex items-center gap-1.5 cursor-pointer group/fg"
         >
-          <Pencil size={14} />
+          <ChevronDown size={14} aria-hidden="true" className={`shrink-0 text-ink-400 transition-transform group-hover/fg:text-ink-700 ${open ? '' : '-rotate-90'}`} />
+          <h3 className={`font-semibold text-ink-900 ${nested ? 'text-[0.78125rem]' : 'text-[0.8125rem]'}`}>{title}</h3>
+          <span className="text-[0.6875rem] font-medium text-ink-400 tabular-nums">{picked.filter(p => choices.some(c => c.key === p)).length}/{choices.length}</span>
         </button>
-        <RowDeleteButton
-          onConfirm={onDelete}
-          onArmedChange={setArmed}
-          ariaLabel={`Delete ${section.name}`}
-          triggerClassName="no-focus-ring w-7 h-7 flex items-center justify-center rounded-sm text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
-        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => choices.forEach(c => { if (all === picked.includes(c.key)) onToggle(c.key); })}
+          className="text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {all ? 'Clear all' : 'Select all'}
+        </button>
       </div>
-
-      {/* Editorial numbered heading — matches the report reader. Double-click or the
-          hover pencil turns it into an inline rename field. */}
-      <div className={`flex items-start justify-between gap-4 transition-[padding] duration-200 ${armed ? 'pr-[9.5rem]' : 'pr-20'}`}>
-        <div className="flex items-baseline gap-3.5 min-w-0 flex-1">
-          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(index + 1).padStart(2, '0')}</span>
-          {editing ? (
-            <input
-              ref={inputRef}
-              value={draft}
-              autoFocus
-              onChange={e => setDraft(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
-                else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
-              }}
-              onPointerDown={e => e.stopPropagation()}
-              aria-label="Section name"
-              className="min-w-0 flex-1 -my-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-brand-400 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] focus:outline-none focus:ring-2 focus:ring-brand-600/30"
-            />
-          ) : (
-            <h2 onDoubleClick={startEdit} title="Double-click to rename" className="min-w-0 truncate text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] cursor-text">{section.name}</h2>
-          )}
-        </div>
-        {typeLabel && (
-          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{typeLabel}</span>
-        )}
+      {open && <p className="text-[0.6875rem] text-ink-400 leading-snug mb-2">{hint}</p>}
+      {open && (
+      <div className="rounded-lg border border-canvas-border overflow-hidden">
+        {choices.map(c => {
+          const on = picked.includes(c.key);
+          return (
+            <label
+              key={c.key}
+              title={c.note}
+              className={`flex items-center gap-2.5 h-9 px-3 border-b border-canvas-border last:border-b-0 cursor-pointer transition-colors ${on ? 'bg-brand-50/40' : 'hover:bg-canvas'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <input
+                type="checkbox"
+                checked={on}
+                disabled={disabled}
+                onChange={() => onToggle(c.key)}
+                className="w-4 h-4 shrink-0 accent-brand-600 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="min-w-0 text-[0.78125rem] text-ink-800 leading-snug">{c.label}</span>
+            </label>
+          );
+        })}
       </div>
-      <span className="mt-3 block h-[2px] w-8 rounded-full" style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }} aria-hidden="true" />
-
-      {/* Body placeholder — the shape of the content this section will hold. */}
-      <div className="mt-4 pl-[1.9rem]">
-        {shape ?? (editingDesc ? (
-          <textarea
-            ref={descRef}
-            value={descDraft}
-            rows={2}
-            onChange={e => setDescDraft(e.target.value)}
-            onBlur={commitDesc}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitDesc(); }
-              else if (e.key === 'Escape') { e.preventDefault(); setEditingDesc(false); }
-            }}
-            onPointerDown={e => e.stopPropagation()}
-            aria-label="Section description"
-            className="w-full max-w-[80ch] resize-none rounded-sm bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
-          />
-        ) : (
-          <p
-            onDoubleClick={startDescEdit}
-            title="Double-click to edit this description"
-            className={`max-w-[80ch] text-[0.875rem] leading-relaxed cursor-text rounded-xs -mx-1 px-1 hover:bg-canvas/60 transition-colors ${section.description ? 'text-ink-600' : 'text-ink-500'}`}
-          >
-            {shownDesc}
-          </p>
-        ))}
-      </div>
-    </motion.div>
+      )}
+    </section>
   );
 }
 
+/** Saving changes to a template that already exists: replace it, or keep it and
+ *  save these changes as a template of their own.
+ *
+ *  Asked rather than assumed, because both are ordinary intentions and neither
+ *  is recoverable from the other — an update rewrites a format other reports
+ *  are already written in, and a silent copy leaves the author editing a
+ *  template nobody uses. */
+function SaveChoiceDialog({ open, templateName, suggestedName, nameTaken, onClose, onUpdate, onSaveCopy }: {
+  open: boolean;
+  templateName: string;
+  suggestedName: string;
+  nameTaken: (name: string) => boolean;
+  onClose: () => void;
+  onUpdate: () => void;
+  onSaveCopy: (name: string) => void;
+}) {
+  const [mode, setMode] = useState<'update' | 'copy'>('update');
+  const [name, setName] = useState(suggestedName);
+  const trimmed = name.trim();
+  const taken = mode === 'copy' && !!trimmed && nameTaken(trimmed);
+  const ready = mode === 'update' || (!!trimmed && !taken);
 
-export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, onDeleteTemplate, onEditScope, existingTemplateNames = [], existingStructures = [], initialName, openingNote }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; /** Delete this template. Only passed for one that already exists, and it asks for confirmation on the list behind. */ onDeleteTemplate?: () => void; /** Open the where-is-this-used question for this template. The editor only shows the answer; the modal owns it. */ onEditScope?: () => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string; /** One honest line above the sheet when the builder was opened because a report read badly, rather than by choice. */ openingNote?: string }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [open, onClose]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  const option = (value: 'update' | 'copy', title: React.ReactNode, hint: string) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={mode === value}
+      onClick={() => setMode(value)}
+      className={`w-full text-left rounded-lg border px-4 py-3 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${mode === value ? 'border-brand-400 bg-brand-50/60' : 'border-canvas-border hover:border-brand-200'}`}
+    >
+      <span className="flex items-start gap-2.5">
+        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${mode === value ? 'border-brand-600' : 'border-canvas-border'}`}>
+          {mode === value && <span className="w-2 h-2 rounded-full bg-brand-600" />}
+        </span>
+        <span className="min-w-0">
+          <span className={`block text-[0.8125rem] font-semibold ${mode === value ? 'text-brand-700' : 'text-ink-800'}`}>{title}</span>
+          <span className="block text-[0.71875rem] text-ink-500 mt-0.5">{hint}</span>
+        </span>
+      </span>
+    </button>
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Save template changes"
+        onClick={e => e.stopPropagation()}
+        className="relative w-full max-w-[460px] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl overflow-hidden"
+      >
+        <div className="px-5 py-4 border-b border-canvas-border">
+          <h3 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Save your changes</h3>
+          <p className="text-[0.75rem] text-ink-500 mt-1">“{templateName}” already exists. Replace it, or keep it as it is and save these changes separately.</p>
+        </div>
+
+        <div className="px-5 py-4 space-y-2.5" role="radiogroup" aria-label="How to save">
+          {option('update', <>Update “{templateName}”</>, 'Reports made from it after this will use the new fields.')}
+          {option('copy', 'Save as a new template', 'The original is left exactly as it is.')}
+          {mode === 'copy' && (
+            <div className="pl-7 pt-1">
+              <label htmlFor="save-copy-name" className="block text-[0.71875rem] font-semibold text-ink-700 mb-1.5">New template name</label>
+              <input
+                id="save-copy-name"
+                value={name}
+                autoFocus
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && ready) { e.preventDefault(); onSaveCopy(trimmed); } }}
+                aria-invalid={taken || undefined}
+                className={`w-full h-9 px-3 bg-canvas-elevated border rounded-md text-[0.8125rem] text-ink-800 outline-none focus:ring-2 focus:ring-brand-500/10 ${taken ? 'border-risk-400' : 'border-canvas-border focus:border-brand-400'}`}
+              />
+              {taken && <p className="mt-1.5 text-[0.71875rem] text-risk-700">A template named “{trimmed}” already exists.</p>}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3.5 border-t border-canvas-border flex items-center justify-end gap-2">
+          <button onClick={onClose} className="h-9 px-3.5 rounded-md text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-draft-50 cursor-pointer transition-colors">Cancel</button>
+          <button
+            onClick={() => (mode === 'update' ? onUpdate() : onSaveCopy(trimmed))}
+            disabled={!ready}
+            className="h-9 px-4 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.8125rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          >
+            {mode === 'update' ? 'Update template' : 'Save new template'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, onDeleteTemplate, onEditScope, existingTemplateNames = [], existingStructures = [], initialName, openingNote, unsaved = false }: { template: EditableTemplate; /** This template is not on the list yet — a duplicate opened for editing before it is stored. Its first save is a create, so Save must not be gated on "something changed". */ unsaved?: boolean; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; /** Delete this template. Only passed for one that already exists, and it asks for confirmation on the list behind. */ onDeleteTemplate?: () => void; /** Open the where-is-this-used question for this template. The editor only shows the answer; the modal owns it. */ onEditScope?: () => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string; /** One honest line above the sheet when the builder was opened because a report read badly, rather than by choice. */ openingNote?: string }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -728,6 +715,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // A brand-new template (BLANK_TEMPLATE) opens the same surface as Customize /
   // Edit, but it isn't "based on" anything — it's a create flow.
   const isNew = template.id === 'ct-blank';
+  // Two steps on the left: the fields the template carries, then how it looks.
+  const [step, setStep] = useState<1 | 2>(1);
+  const [headerFields, setHeaderFields] = useState<string[]>(template.headerFields ?? DEFAULT_HEADER_FIELDS);
+  const [bodyFields, setBodyFields] = useState<string[]>(template.bodyFields ?? DEFAULT_BODY_FIELDS);
+  const [kpiFields, setKpiFields] = useState<string[]>(template.kpiFields ?? DEFAULT_KPI_FIELDS);
+  const [summaryColumns, setSummaryColumns] = useState<string[]>(template.summaryColumns ?? DEFAULT_SUMMARY_COLUMNS);
+  const [bodyOpen, setBodyOpen] = useState(true);
+  const toggleIn = (set: React.Dispatch<React.SetStateAction<string[]>>) => (key: string) =>
+    set(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
   // The name field is shown in every flow (New / Edit), seeded to a sensible
   // default: an explicit initialName, or the template's own name when editing.
   // Cap the seeded name to the same 60-char limit the field enforces, so a long
@@ -1256,67 +1252,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setPendingImport(null);
   };
 
-  // One block printed in two places is stored once; every other placement
-  // points at it, so the preview resolves both to the same shape.
-  const blockLibrary = collectBlockLibrary(sections);
-
-  const [newSectionName, setNewSectionName] = useState('');
-  // The moment they touch the composer they have chosen to write the format
-  // themselves, so the upload offer stops being the answer and becomes a tool:
-  // it leaves the page and reappears as the footer button. Sticky, because a
-  // block that came back on every blur would jump the page under their cursor.
-  const [writingByHand, setWritingByHand] = useState(false);
-  const addSection = () => {
-    const name = newSectionName.trim();
-    if (!name) return;
-    if (sections.some(s => s.name.toLowerCase() === name.toLowerCase())) {
-      addToast({ type: 'error', message: `Section "${name}" already exists.` });
-      return;
-    }
-    setSections(prev => [...prev, { name, icon: 'file-text' }]);
-    setNewSectionName('');
-  };
-  // Rename a section in place — keyed by index so duplicate names stay distinct.
-  const renameSection = (index: number, name: string) => {
-    setSections(prev => prev.map((s, i) => (i === index ? { ...s, name } : s)));
-  };
-  // Set (or clear, with '') the section's custom description.
-  const describeSection = (index: number, description: string) => {
-    setSections(prev => prev.map((s, i) => (i === index ? { ...s, description: description || undefined } : s)));
-  };
-  // Move a section from one index to another (drag-drop reorder).
-  const moveSection = (from: number, to: number) => {
-    if (to < 0 || to >= sections.length || to === from) return;
-    setSections(prev => {
-      const next = prev.slice();
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  };
-  // Remove a section — reversible, not a silent drop (matches the review canvas).
-  // Keyed by index so duplicate names can't delete the wrong row, and Undo
-  // restores it at its original position.
-  const removeSection = (index: number) => {
-    const removed = sections[index];
-    if (!removed) return;
-    setSections(prev => prev.filter((_, i) => i !== index));
-    addToast({
-      type: 'info',
-      // Persistent — the Undo stays until acted on or dismissed, so a delete is
-      // never a point of no return (#4).
-      persist: true,
-      message: `Removed “${removed.name || 'Untitled section'}”.`,
-      secondaryAction: {
-        label: 'Undo',
-        onClick: () => setSections(prev => {
-          const next = prev.slice();
-          next.splice(Math.min(index, next.length), 0, removed);
-          return next;
-        }),
-      },
-    });
-  };
+  // Sections are no longer authored here: this template is an Action Taken
+  // Report, whose sections the report itself fixes. They are still stored and
+  // still drive the generated report — the editor just no longer edits them.
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ field: 'copyName' | 'brand' | 'sections'; label: string }[]>([]);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
@@ -1330,6 +1268,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Near-duplicate structure warning (§9) — the section overlap with the closest
   // existing template, surfaced at save to kill "Copy of…" sprawl.
   const [dupConfirm, setDupConfirm] = useState<{ name: string; shared: number; total: number } | null>(null);
+  // Update this template, or save the changes as a new one? Opened by Save when
+  // the template being edited is already on the list.
+  const [saveChoice, setSaveChoice] = useState(false);
   // Soft advisory at save (non-blocking): the suggested sections not yet added.
   // A template built without them tends to generate incomplete, so we surface the
   // gap on "Create" but always let the author proceed.
@@ -1348,7 +1289,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const copyNameRef = useRef<HTMLInputElement>(null);
   const brandRef = useRef<HTMLInputElement>(null);
   const sectionsRef = useRef<HTMLDivElement>(null);
-  const sectionsListRef = useRef<HTMLDivElement>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1469,6 +1409,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   ) : null;
 
   const isDirty =
+    headerFields.join('|') !== (template.headerFields ?? DEFAULT_HEADER_FIELDS).join('|') ||
+    bodyFields.join('|') !== (template.bodyFields ?? DEFAULT_BODY_FIELDS).join('|') ||
+    kpiFields.join('|') !== (template.kpiFields ?? DEFAULT_KPI_FIELDS).join('|') ||
+    summaryColumns.join('|') !== (template.summaryColumns ?? DEFAULT_SUMMARY_COLUMNS).join('|') ||
     copyName !== initial.copyName ||
     brand !== initial.brand ||
     theme !== initial.theme ||
@@ -1528,7 +1472,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     sections: sectionsRef,
   };
 
-  const handleSave = (skipDup = false) => {
+  const handleSave = (skipDup = false, mode?: 'update' | 'copy', copyAs?: string) => {
     // Required-field validation: name + brand are required; sections non-empty.
     const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
     if (!copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
@@ -1546,6 +1490,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       });
       return;
     }
+    // Changing a template that is already saved: replacing it and saving the
+    // changes as a new template are both ordinary intentions, and picking the
+    // wrong one cannot be undone — so ask rather than assume.
+    if (!isNew && !unsaved && isDirty && !mode) { setSaveChoice(true); return; }
     // Near-duplicate structure warning (§9) — new templates only.
     if (isNew && !skipDup) {
       const dup = nearDuplicate();
@@ -1555,9 +1503,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setIsSaving(true);
     // Simulate an async save so the spinner is observable.
     window.setTimeout(() => {
-      const finalName = copyName.trim() || (isNew ? 'Untitled Template' : template.name);
+      // Saving these changes as a template of their own takes the name given in
+      // the dialog; everything else is the create path unchanged.
+      const asCopy = mode === 'copy';
+      const finalName = asCopy
+        ? (copyAs ?? '').trim()
+        : (copyName.trim() || (isNew ? 'Untitled Template' : template.name));
 
-      if (isNew && onSaveNew) {
+      if ((isNew || asCopy) && onSaveNew) {
         if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
           setIsSaving(false);
           addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
@@ -1569,6 +1522,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           name: finalName,
           category: template.category ?? 'Custom',
           sections,
+          // The fields ticked in step 1. They were only written on the edit
+          // path, so a template created here carried none and the reports made
+          // from it printed everything.
+          headerFields,
+          kpiFields,
+          summaryColumns,
+          bodyFields,
           brand: brand.trim(),
           theme,
           brandColor: brandColor || undefined,
@@ -1605,6 +1565,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             ...template,
             name: finalName,
             sections,
+            headerFields,
+            kpiFields,
+            summaryColumns,
+            bodyFields,
             brand: brand.trim(),
             theme,
             brandColor: brandColor || undefined,
@@ -1626,8 +1590,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         addToast({ type: 'success', message: 'Template saved.' });
       }
       logEvent({
-        action: isNew ? 'Create' : 'Update',
-        description: `${isNew ? 'Created' : 'Saved'} template "${finalName}"`,
+        action: isNew || asCopy ? 'Create' : 'Update',
+        description: `${isNew ? 'Created' : asCopy ? 'Saved a new' : 'Saved'} template "${finalName}"`,
         module: 'Reports',
         entity: 'Report Template',
       });
@@ -1647,7 +1611,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // The upload door is the offer on the desk only while the page is untouched.
   // Writing a section by hand, or reading one from a file, answers the question
   // it was asking, so it moves to the footer as a plain button and stays there.
-  const showImportOffer = sections.length === 0 && !importedFrom && !importing && !writingByHand;
+  const showImportOffer = sections.length === 0 && !importedFrom && !importing;
 
   // Minimized — the full modal is not rendered, so the app behind is usable while
   // extraction runs (or after it finishes). Only the corner card shows; Open
@@ -1667,12 +1631,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className={`fixed inset-0 z-[60] flex items-center justify-center ${isNew ? 'p-6' : ''}`} onClick={attemptClose}>
-      {/* Editing an existing template opens full screen — there's no page
-          behind it worth hinting at, and a fixed-size dialog wasted the room
-          a real document needs to edit comfortably. New/create still opens as
-          a dialog over the reports page it was launched from. */}
-      {isNew && <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={attemptClose}>
+      {/* A dialog over the reports page, whether the template is new or being
+          edited — the page behind stays visible, so the editor reads as a step
+          away from the list rather than a place you have been taken to. */}
+      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
       {/* A big dialog, not the page. Everything in here is a document — the
           start screen, the check screen, the outline the editor builds — so it
           takes nearly the whole window and leaves a margin that says the page
@@ -1687,7 +1650,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         // The one size change in this dialog is the check screen arriving, so it
         // eases rather than snaps.
         className={`relative flex max-h-full max-w-full flex-col overflow-hidden border border-canvas-border bg-canvas-elevated transition-[width,height] duration-[420ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none ${
-          isNew ? `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[660px] w-[1180px]'}` : 'h-full w-full rounded-none border-none'
+          `rounded-2xl ${wideShell ? 'h-[1000px] w-[1600px]' : 'h-[820px] w-[1320px]'}`
         }`}
         onClick={e => e.stopPropagation()}
         onDragEnter={e => {
@@ -1790,6 +1753,23 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 panel below scrolls. */}
             {/* Padded only when it has something in it — an empty alert slot was
                 holding 36px of blank column above the first field. */}
+            {/* Which step the column is on. Both stay reachable — this is a
+                two-part form, not a wizard that locks you out of going back. */}
+            <div className="shrink-0 flex items-center gap-1 px-5 pt-4">
+              {([[1, 'Fields'], [2, 'Customise']] as const).map(([n, label]) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setStep(n)}
+                  aria-current={step === n ? 'step' : undefined}
+                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[0.78125rem] font-semibold cursor-pointer transition-colors ${step === n ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800 hover:bg-canvas'}`}
+                >
+                  <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[0.625rem] font-bold ${step === n ? 'bg-brand-600 text-white' : 'bg-canvas-border text-ink-600'}`}>{n}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className={`shrink-0 px-5 ${activeErrors.length > 0 ? 'pt-4' : ''}`}>
               {/* Validation summary — animates in/out (no hard layout jump) and
                   each item is a clear, tappable "fix this field" chip. */}
@@ -1838,7 +1818,73 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             {/* One required field, then a settings list. Everything else is a
                 row carrying its own current answer, so the column reads at a
                 glance and opens in place instead of scrolling. */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+            {step === 1 && (
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+                <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-4">
+                  Tick the standard fields this template carries. Header fields print on the cover;
+                  body fields print under every observation.
+                </p>
+                <FieldGroup
+                  title="Header fields"
+                  hint="Printed once, on the report's cover."
+                  choices={HEADER_FIELD_CHOICES}
+                  picked={headerFields}
+                  onToggle={toggleIn(setHeaderFields)}
+                  disabled={isSaving || importing}
+                />
+                {/* Body fields, grouped by the section each one feeds, so a tick
+                    maps to somewhere visible in the report rather than a flat
+                    list of everything the body could carry. */}
+                <button
+                  type="button"
+                  onClick={() => setBodyOpen(o => !o)}
+                  aria-expanded={bodyOpen}
+                  className="inline-flex items-center gap-1.5 cursor-pointer group/bf"
+                >
+                  <ChevronDown size={14} aria-hidden="true" className={`shrink-0 text-ink-400 transition-transform group-hover/bf:text-ink-700 ${bodyOpen ? '' : '-rotate-90'}`} />
+                  <span className="text-[0.8125rem] font-semibold text-ink-900">Body fields</span>
+                  <span className="text-[0.6875rem] font-medium text-ink-400 tabular-nums">
+                    {kpiFields.length + summaryColumns.length + bodyFields.length}/{KPI_CHOICES.length + SUMMARY_COLUMN_CHOICES.length + BODY_FIELD_CHOICES.length}
+                  </span>
+                </button>
+                {bodyOpen && (
+                  <p className="text-[0.6875rem] text-ink-400 leading-snug mt-0.5 mb-2.5">
+                    What the report carries below the cover, section by section.
+                  </p>
+                )}
+                <div className={`border-l-2 border-canvas-border pl-3 ${bodyOpen ? '' : 'hidden'}`}>
+                  <FieldGroup
+                    nested
+                    title="Executive Summary"
+                    hint="The rollup tiles the report opens on."
+                    choices={KPI_CHOICES}
+                    picked={kpiFields}
+                    onToggle={toggleIn(setKpiFields)}
+                    disabled={isSaving || importing}
+                  />
+                  <FieldGroup
+                    nested
+                    title="Observation Wise Summary"
+                    hint="Columns beside each observation's name, which is always the row."
+                    choices={SUMMARY_COLUMN_CHOICES}
+                    picked={summaryColumns}
+                    onToggle={toggleIn(setSummaryColumns)}
+                    disabled={isSaving || importing}
+                  />
+                  <FieldGroup
+                    nested
+                    title="Observation Details"
+                    hint="What every observation carries in full."
+                    choices={BODY_FIELD_CHOICES}
+                    picked={bodyFields}
+                    onToggle={toggleIn(setBodyFields)}
+                    disabled={isSaving || importing}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className={`flex-1 min-h-0 overflow-y-auto px-5 pb-5 ${step === 1 ? 'hidden' : ''}`}>
               {/* Name, organisation and the letterhead line are the three a
                   template is actually typed, so they stay open and read as ONE
                   block: no rule between them, one rhythm of label / field /
@@ -2164,21 +2210,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
               </SettingsFold>
 
-              {/* Last thing in the column, after every setting: throwing the
-                  template away is not a setting, so it sits below them all and
-                  asks before it does anything. */}
-              {!isNew && onDeleteTemplate && (
-                <div className="mt-4 border-t border-canvas-border pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={isSaving || importing}
-                    className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-canvas-border bg-white px-3 text-[0.8125rem] font-semibold text-risk-700 transition-colors hover:border-risk-200 hover:bg-risk-50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risk-600/40 focus-visible:ring-offset-1"
-                  >
-                    <Trash2 size={15} /> Delete template
-                  </button>
-                </div>
-              )}
               </div>
             </div>
           </div>
@@ -2239,87 +2270,150 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               )}
               <div className="relative mx-auto w-full max-w-3xl rounded-lg border border-canvas-border" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
-                  title={copyName || 'Untitled Template'}
+                  title="Action Taken Report"
                   titleClassName="text-[1.5rem]"
                   logo={logoDataUrl || undefined}
                   className="rounded-t-lg"
                   gradient={coverGradient}
                   headerText={headerText}
-                  footer={
-                    /* All report facts live in the letterhead as one full-width
-                       strip — no duplicated meta panel below. */
-                    /* Organisation — the one fact a template's own cover has.
-                       No Date, no Period, no invented value: those are facts a
-                       generated report's cover carries, not this preview's. A
-                       reference number is NOT held for reports built from a
-                       custom template either — only ATR documents carry one —
-                       so no box promises one. */
-                    <div className="grid grid-cols-2 gap-6">
-                      {templateCoverFields(brand).map(f => (
-                        <div key={f.label} className="min-w-0">
-                          <div className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white/50">{f.label}</div>
-                          <div className="text-[0.875rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
+                >
+                </ReportBrandBanner>
+
+                {/* The report's own facts, as an Action Taken Report prints them:
+                    a quiet label over the value, three to a row, directly under
+                    the letterhead. Only the fields ticked in step 1 appear, so
+                    the preview is the answer to "what will this template carry?"
+                    rather than a fixed sample. */}
+                {headerFields.length > 0 && (
+                  <div className="border-x border-b border-canvas-border bg-white px-9 py-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+                      {HEADER_FIELD_CHOICES.filter(h => headerFields.includes(h.key)).map(h => (
+                        <div key={h.key} className="min-w-0">
+                          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-900">{h.label}</div>
+                          <div className="text-[0.8125rem] text-ink-400 leading-relaxed mt-1">{SAMPLE_HEADER[h.key] ?? '—'}</div>
                         </div>
                       ))}
                     </div>
-                  }
-                >
-                  <p className="text-[0.875rem] text-white/75">{template.desc || 'Custom report template'}</p>
-                </ReportBrandBanner>
-
-                {/* Sections — each drag-reorderable and removable on hover. */}
-                {sections.length > 0 && (
-                  <div ref={sectionsListRef}>
-                    <AnimatePresence initial={false}>
-                      {sections.map((section, i) => (
-                        <ReportSectionBlock
-                          key={section.name}
-                          section={section}
-                          index={i}
-                          listRef={sectionsListRef}
-                          onMove={moveSection}
-                          onDelete={() => removeSection(i)}
-                          onRename={name => renameSection(i, name)}
-                          onDescribe={description => describeSection(i, description)}
-                          blockLibrary={blockLibrary}
-                        />
-                      ))}
-                    </AnimatePresence>
                   </div>
                 )}
 
-                {/* Composer — add a section, in the flow of the document (not a
-                    detached toolbar). */}
-                <div ref={sectionsRef} tabIndex={-1} className="border-x border-canvas-border bg-white px-9 pt-5 pb-7">
-                  {sections.length === 0 && (
-                    <p className="mb-3 text-[0.8125rem] text-ink-400">No sections yet. Write the first one below.</p>
-                  )}
-                  {/* Touching either half of the composer is the choice to write
-                      it by hand, so the upload offer leaves the desk on the
-                      first click, not on the first saved section. */}
-                  <div className="flex items-center gap-2" onPointerDown={() => setWritingByHand(true)}>
-                    <input
-                      value={newSectionName}
-                      onFocus={() => setWritingByHand(true)}
-                      onChange={e => setNewSectionName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
-                      placeholder="Add a section, then press ↵"
-                      title="Type a section name and press Enter to add"
-                      className="flex-1 h-10 px-3 rounded-lg border border-dashed border-canvas-border bg-canvas/30 text-[0.8125rem] transition-colors hover:border-brand-300 focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10"
-                    />
-                    <button
-                      onClick={addSection}
-                      disabled={!newSectionName.trim()}
-                      className={`no-focus-ring inline-flex items-center gap-1 h-10 px-4 text-[0.8125rem] font-semibold rounded-lg transition-colors ${
-                        newSectionName.trim()
-                          ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
-                          : 'text-text-muted bg-canvas-border cursor-not-allowed'
-                      }`}
-                    >
-                      <Plus size={14} /> Add
-                    </button>
+                {/* The rollup an Action Taken Report opens on. Fixed, because
+                    these are the report's own sections — the template decides
+                    which fields they carry, not whether they exist. */}
+                <div className="border-x border-canvas-border bg-white px-9 py-6">
+                  <ReportNumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and action plan rollup" />
+                  <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+                    {KPI_CHOICES.filter(k => kpiFields.includes(k.key)).map(k => (
+                      <div key={k.key} className="rounded-lg border border-canvas-border px-3 py-3">
+                        <div className={`text-[1.5rem] font-bold leading-none ${k.tone}`}>{k.value}</div>
+                        <div className="mt-2 text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-400 leading-snug">{k.label}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                <div className="border-x border-canvas-border bg-white px-9 py-6">
+                  <ReportNumberedHeading n={2} title="Observation Wise Summary" subtitle="Severity, action plans and status — per observation" />
+                  <div className="overflow-hidden rounded-lg border border-canvas-border">
+                    <table className="w-full text-[0.75rem]">
+                      <thead>
+                        <tr className="bg-brand-50/60 text-ink-700 text-left">
+                          <th className="px-4 py-2.5 font-semibold">Observation &amp; Action Plans</th>
+                          {SUMMARY_COLUMN_CHOICES.filter(c => summaryColumns.includes(c.key)).map(c => (
+                            <th
+                              key={c.key}
+                              className={`py-2.5 font-semibold text-center whitespace-nowrap ${c.key === 'severity' ? 'px-3 w-[104px]' : c.key === 'status' ? 'px-3 w-[136px]' : 'px-2 w-[74px]'}`}
+                            >{c.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SAMPLE_ROWS.map(r => (
+                          <tr key={r.title} className="border-t border-canvas-border align-top">
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-ink-900 leading-snug">{r.title}</div>
+                              <div className="text-[0.6875rem] text-ink-500">{r.process}</div>
+                            </td>
+                            {SUMMARY_COLUMN_CHOICES.filter(c => summaryColumns.includes(c.key)).map(c => {
+                              if (c.key === 'severity' || c.key === 'status') {
+                                const [text, tone] = c.key === 'severity' ? r.sev : r.status;
+                                return (
+                                  <td key={c.key} className="px-3 py-3 text-center">
+                                    <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${tone}`}>{text}</span>
+                                  </td>
+                                );
+                              }
+                              const v = r.cells[c.key];
+                              return (
+                                <td key={c.key} className="px-2 py-3 text-center">
+                                  <span className={`tabular-nums font-semibold ${v === '0' ? 'text-ink-300' : CELL_TONE[c.key] ?? 'text-ink-800'}`}>{v}</span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Observation Details — the third of the report's own sections,
+                    drawn the way the Action Taken Report draws it: the numbered
+                    heading, then one observation card with a label/value grid.
+                    Only the ticked fields appear. */}
+                {bodyFields.length > 0 && (
+                  <div className="border-x border-canvas-border bg-white px-9 py-6">
+                    <ReportNumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, action plan and verification" />
+
+                    <div className="rounded-lg border border-canvas-border overflow-hidden">
+                      <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className="shrink-0 w-7 h-7 rounded-md bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">1</span>
+                          <div className="min-w-0">
+                            <h4 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">
+                              {bodyFields.includes('title') ? SAMPLE_BODY.title : 'Observation 1'}
+                            </h4>
+                            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">Procurement (P2P)</div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          {bodyFields.includes('observationStatus') && (
+                            <span className="inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold bg-mitigated-50 text-mitigated-700 whitespace-nowrap">{SAMPLE_BODY.observationStatus}</span>
+                          )}
+                          {bodyFields.includes('risk') && (
+                            <span className="inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold bg-high-50 text-high-700 whitespace-nowrap">{SAMPLE_BODY.risk}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="px-5 py-4">
+                        <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-2 items-start">
+                          {BODY_FIELD_CHOICES
+                            .filter(x => bodyFields.includes(x.key) && !['title', 'actionTakenStatus', 'observationStatus', 'risk'].includes(x.key))
+                            .map(x => (
+                              <Fragment key={x.key}>
+                                <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">{x.label}</div>
+                                {x.key === 'actionPlanTitle' ? (
+                                  <p className="pt-2 flex items-center gap-2 flex-wrap">
+                                    <span className="text-[0.8125rem] text-ink-800 leading-relaxed">{SAMPLE_BODY.actionPlanTitle}</span>
+                                    {bodyFields.includes('actionTakenStatus') && (
+                                      <span className="inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold bg-mitigated-50 text-mitigated-700 whitespace-nowrap">{SAMPLE_BODY.actionTakenStatus}</span>
+                                    )}
+                                  </p>
+                                ) : (
+                                  <p className="pt-2 text-[0.8125rem] text-ink-800 leading-relaxed">{SAMPLE_BODY[x.key] ?? '—'}</p>
+                                )}
+                              </Fragment>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* The report's remaining sections (Observation Details,
+                    Auditor Comments, Approvals) follow the same fixed shape,
+                    so the preview stops here rather than inviting edits to a
+                    structure the Action Taken Report already fixes. */}
 
                 {/* Sign-off block — the Approvals section on the finished report.
                     Static here (no Sign action); the reader makes it signable. */}
@@ -2394,6 +2488,18 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 )}
               </>
             )}
+            {/* Throwing the template away is a whole-template action like
+                building one from a report, so the two sit together. */}
+            {!isNew && onDeleteTemplate && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={isSaving || importing}
+                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-canvas-border bg-white px-4 text-[0.875rem] font-semibold text-risk-700 transition-colors hover:border-risk-200 hover:bg-risk-50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risk-600/40 focus-visible:ring-offset-1"
+              >
+                <Trash2 size={15} /> Delete template
+              </button>
+            )}
           </div>
           {/* Right — primary actions. */}
           <div className="flex items-center gap-2 shrink-0">
@@ -2410,26 +2516,27 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               Upload is the one primary action on screen. It returns to
               primary the moment sections exist, by hand or by import. */}
           <motion.button
-            onClick={() => handleSave()}
-            disabled={isSaving || nameTaken || !copyName.trim() || (!isNew && !isDirty)}
+            onClick={() => (step === 1 ? setStep(2) : handleSave())}
+            disabled={step === 1 ? false : isSaving || nameTaken || !copyName.trim() || (!isNew && !unsaved && !isDirty)}
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            title={nameTaken ? 'A template with this name already exists — choose a different name'
-              : !isNew && !isDirty ? 'Nothing has changed yet'
+            title={step === 1 ? 'Choose the fields, then customise how it looks'
+              : nameTaken ? 'A template with this name already exists — choose a different name'
+              : !isNew && !unsaved && !isDirty ? 'Nothing has changed yet'
               : undefined}
-            className={showImportOffer
+            className={showImportOffer && step === 2
               ? 'inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-white text-ink-800 border border-canvas-border rounded-md text-[0.875rem] font-semibold hover:bg-paper-50 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1'
               : 'inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.875rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150 cursor-pointer disabled:opacity-70 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1'}
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
-                key={isSaving ? 'saving' : 'idle'}
+                key={step === 1 ? 'next' : isSaving ? 'saving' : 'idle'}
                 initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.16 }}
                 className="inline-flex items-center gap-1.5"
               >
                 {isSaving && <Loader2 size={12} className="animate-spin" />}
-                {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save changes'}
+                {step === 1 ? 'Next' : isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save Template'}
               </motion.span>
             </AnimatePresence>
           </motion.button>
@@ -3306,6 +3413,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         description={<>You have unsaved changes to this template. Closing now will discard them.</>}
         confirmLabel="Discard"
         destructive
+      />
+      <SaveChoiceDialog
+        open={saveChoice}
+        templateName={template.name}
+        suggestedName={`${copyName.trim() || template.name} (copy)`}
+        nameTaken={n => existingTemplateNames.some(x => x.toLowerCase() === n.toLowerCase())}
+        onClose={() => setSaveChoice(false)}
+        onUpdate={() => { setSaveChoice(false); handleSave(true, 'update'); }}
+        onSaveCopy={n => { setSaveChoice(false); handleSave(true, 'copy', n); }}
       />
       <ConfirmDialog
         open={dupConfirm !== null}

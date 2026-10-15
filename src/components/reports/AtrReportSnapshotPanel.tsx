@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { X, History, ChevronDown, ChevronRight, Sparkles, CalendarClock } from 'lucide-react';
 import {
-  splitEvents, replay, fmtEventDay, fmtEventClock, fmtEventTime, ROLE_TONE,
+  splitEvents, fmtEventDay, fmtEventClock, fmtEventTime, ROLE_TONE,
   type AtrTimeline, type AtrEvent,
 } from './atrTimeline';
-import { computeExecSummary } from './atrTemplate';
 
 // ISO ↔ the value a <input type="datetime-local"> understands (local time, no seconds).
 const toLocalInput = (iso: string) => {
@@ -51,14 +52,84 @@ function EventRow({ ev, applied, isCurrent, onPick }: { ev: AtrEvent; applied: b
   );
 }
 
-/** The Report Snapshot side panel: a scrubber over every recorded action on this
+/** The trigger marks itself so the panel can sit beside it. */
+export const SNAPSHOT_ANCHOR_ATTR = 'data-atr-snapshot-anchor';
+
+const PANEL_WIDTH = 400;
+const GAP = 8;
+const PAD = 12;
+
+/** Where the panel goes: under its trigger, right-aligned, clamped to the
+ *  viewport. Re-read each frame while open — the sidebar hover-expands and the
+ *  report scrolls under a sticky header, so the trigger does move. */
+function measureAnchor(): { top: number; left: number; maxHeight: number } {
+  const btn = document.querySelector(`[${SNAPSHOT_ANCHOR_ATTR}]`) as HTMLElement | null;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const r = btn?.getBoundingClientRect();
+  const top = r ? r.bottom + GAP : PAD;
+  let left = r ? r.right - PANEL_WIDTH : vw - PANEL_WIDTH - PAD;
+  left = Math.min(Math.max(PAD, left), vw - PANEL_WIDTH - PAD);
+  return { top, left, maxHeight: Math.max(240, vh - top - PAD) };
+}
+
+/** The Report Snapshot panel: a scrubber over every recorded action on this
  *  ATR, a free date-time picker, and the action trail — applied vs. still to
- *  come — for the chosen moment. `asOf` null means "latest". */
-export default function AtrReportSnapshotPanel({ timeline, asOf, onChange, onClose }: {
+ *  come — for the chosen moment. `asOf` null means "latest".
+ *
+ *  It overlays the report rather than sitting beside it: reading a snapshot is
+ *  a glance back, and re-flowing the document to make room for it would reset
+ *  the reader's place in the very thing they are comparing against. */
+export default function AtrReportSnapshotPanel({ open, timeline, asOf, onChange, onClose }: {
+  open: boolean;
   timeline: AtrTimeline;
   asOf: string | null;
   onChange: (asOf: string | null) => void;
   onClose: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<ReturnType<typeof measureAnchor> | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let raf = 0;
+    let last = '';
+    const tick = () => {
+      const next = measureAnchor();
+      const key = `${next.top}|${next.left}|${next.maxHeight}`;
+      if (key !== last) { last = key; setPos(next); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    // Drop the position on close, so reopening measures afresh rather than
+    // painting one frame where the trigger used to be.
+    return () => { cancelAnimationFrame(raf); setPos(null); };
+  }, [open]);
+
+  // Escape closes; focus moves in on open and back to the trigger on close.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    else (document.querySelector(`[${SNAPSHOT_ANCHOR_ATTR}]`) as HTMLElement | null)?.focus?.({ preventScroll: true });
+  }, [open]);
+
+  return <SnapshotBody {...{ open, timeline, asOf, onChange, onClose, reduce, panelRef, anchor: pos }} />;
+}
+
+function SnapshotBody({ open, timeline, asOf, onChange, onClose, reduce, panelRef, anchor }: {
+  open: boolean;
+  timeline: AtrTimeline;
+  asOf: string | null;
+  onChange: (asOf: string | null) => void;
+  onClose: () => void;
+  reduce: boolean | null;
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  anchor: { top: number; left: number; maxHeight: number } | null;
 }) {
   const events = useMemo(() => [...timeline.events].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts)), [timeline.events]);
   const { applied, later } = useMemo(() => splitEvents(timeline, asOf ?? undefined), [timeline, asOf]);
@@ -68,11 +139,6 @@ export default function AtrReportSnapshotPanel({ timeline, asOf, onChange, onClo
   const pos = applied.length;
   const currentTs = asOf ?? (last?.ts ?? new Date().toISOString());
   const currentEventId = applied[applied.length - 1]?.id;
-
-  // What the report looked like then — headline numbers for the chosen moment.
-  const snapshot = useMemo(() => replay(timeline, asOf ?? undefined), [timeline, asOf]);
-  const ex = computeExecSummary(snapshot.observations);
-  const touched = new Set(applied.filter(e => e.observationIndex != null).map(e => e.observationIndex)).size;
 
   const pickIndex = (n: number) => {
     if (n >= events.length) { onChange(null); return; }
@@ -90,8 +156,8 @@ export default function AtrReportSnapshotPanel({ timeline, asOf, onChange, onClo
   const isApplied = (ev: AtrEvent) => applied.some(a => a.id === ev.id);
   const firstLaterId = later[0]?.id;
 
-  return (
-    <aside className="w-[360px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] flex flex-col rounded-lg border border-canvas-border bg-canvas-elevated print:hidden" aria-label="Report Snapshot">
+  const body = (
+    <>
       <header className="shrink-0 px-4 pt-3.5 pb-3 border-b border-canvas-border">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2.5 min-w-0">
@@ -141,14 +207,6 @@ export default function AtrReportSnapshotPanel({ timeline, asOf, onChange, onClo
           </div>
         </div>
 
-        {/* Headline for the chosen moment */}
-        <div className="mt-3 rounded-md bg-canvas px-3 py-2 text-[0.71875rem] text-ink-600 leading-snug">
-          <span className="font-semibold text-ink-800 tabular-nums">{applied.length}</span> of <span className="tabular-nums">{events.length}</span> actions applied
-          {touched > 0 && <> · <span className="tabular-nums">{touched}</span> observation{touched === 1 ? '' : 's'} updated</>}
-          <br />
-          <span className="tabular-nums">{ex.obsStatus.Closed}</span> closed · <span className="tabular-nums">{ex.obsStatus['In Progress']}</span> in progress · <span className="tabular-nums">{ex.obsStatus.Open + ex.obsStatus.Overdue}</span> open
-          {ex.progressPct != null && <> · <span className="tabular-nums">{ex.progressPct}%</span> remediated</>}
-        </div>
       </header>
 
       {/* Action trail */}
@@ -178,6 +236,33 @@ export default function AtrReportSnapshotPanel({ timeline, asOf, onChange, onClo
           </section>
         ))}
       </div>
-    </aside>
+    </>
+  );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <AnimatePresence>
+      {open && anchor && (
+        <div key="atr-snapshot" className="fixed inset-0 z-[70] print:hidden">
+          {/* Click-away: invisible, so the report stays fully readable behind it. */}
+          <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+          <motion.div
+            ref={panelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-label="Report Snapshot"
+            initial={{ opacity: 0, scale: reduce ? 1 : 0.96, y: reduce ? 0 : -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: reduce ? 1 : 0.98, y: reduce ? 0 : -3, transition: { duration: reduce ? 0 : 0.12, ease: [0.4, 0, 1, 1] } }}
+            transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 560, damping: 40, mass: 0.7, opacity: { duration: 0.14 } }}
+            style={{ top: anchor.top, left: anchor.left, width: PANEL_WIDTH, maxHeight: anchor.maxHeight, transformOrigin: 'top right' }}
+            className="absolute flex flex-col rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_8px_28px_-8px_rgb(15_8_30_/_0.22)] outline-none overflow-hidden"
+          >
+            {body}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }

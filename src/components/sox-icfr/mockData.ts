@@ -2120,6 +2120,68 @@ function alturaAwaitingApproval(controls: Control[]): Control[] {
 }
 
 /**
+ * One Altura control with no testing on it at all (user ask, 8 Oct: "kisi bhi
+ * ek control ko testing 0 kardo — taaki starting se dekh paye control
+ * testing"). The first Procure to Pay control — none of the findings, the
+ * blocked FX control, the payee or the two-route control lands on it. Its
+ * design test isn't even set up (8 Oct), so it opens where production does; every result,
+ * conclusion, approval, population, sample and sign-off is cleared.
+ */
+function alturaUntestedControl(controls: Control[]): Control[] {
+  const base = controls.find(c => c.process === 'Procure to Pay');
+  if (!base) return controls;
+  const fresh: Control = {
+    ...base,
+    wpSignoff: undefined,
+    iraPlan: undefined,
+    unableToTest: undefined,
+    design: {
+      ...base.design,
+      // Not set up at all — the same first state `untested` (store.tsx) leaves:
+      // TOD opens on "isn't set up yet" and Start the design test lays out its
+      // elements and checks (user, 8 Oct — matching production).
+      points: [],
+      documents: [],
+      conclusion: 'Not tested',
+      rationale: undefined,
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      ira: undefined,
+      approval: undefined,
+      designReturn: undefined,
+      walkthrough: undefined,
+      judgements: undefined,
+      implemented: undefined,
+    },
+    operating: {
+      ...base.operating,
+      parked: undefined,
+      ipe: undefined,
+      definition: undefined,
+      population: undefined,
+      sampling: undefined,
+      rounds: undefined,
+      extractionConfirmed: undefined,
+      attributesLocked: undefined,
+      exceptions: undefined,
+      evidenceReports: undefined,
+      steps: base.operating.steps.map(st => ({
+        ...st, result: 'Not tested' as TestResult, override: undefined, validation: undefined, workflowRunRef: undefined,
+        staleRun: undefined, attestation: undefined, confirmed: undefined, sampleResults: undefined, inputFile: undefined,
+        requiredFiles: st.requiredFiles?.map(f => ({ ...f, file: undefined })),
+      })),
+      conclusion: 'Not tested',
+      rationale: undefined,
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+    },
+  };
+  return controls.map(c => (c === base ? fresh : c));
+}
+
+/**
  * The one cycle a plain SOX engagement has under way.
  *
  * Every SOX engagement's Overview is the audit portfolio now, so an engagement
@@ -2520,6 +2582,10 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // …and one design still waits on the reviewer. Before the run records below,
   // so no run claims an Effective TOE on the control this takes it off.
   if (rich) controls = alturaAwaitingApproval(controls);
+  // …and one not tested at all, so the walk from TOD to sign-off can be shown
+  // from the very first step (user ask, 8 Oct). Interim only, and before the
+  // run records, so no run claims it.
+  if (meta.id === NEW_FLOW_ENGAGEMENT_ID) controls = alturaUntestedControl(controls);
   // The roll-forward demo's two interim failures — set BEFORE the run record
   // below is built from the controls, so the register and the run agree.
   const rfDemo = meta.id === 'eng-sox-rf';

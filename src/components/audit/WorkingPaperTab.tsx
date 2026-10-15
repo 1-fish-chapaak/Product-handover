@@ -1028,7 +1028,6 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
         process: openPaper.row.subProcess,
         description: edits.results ?? openPaper.results,
         querySummary: `${openPaper.row.controlId} · ${openPaper.attributesTested} of ${openPaper.attributesInScope} attributes tested`,
-        riskSummary: `${openPaper.row.riskId} · ${openPaper.row.riskDescription}`,
         risk: openPaper.conclusion === 'Needs improvement' ? 'High' : openPaper.conclusion === 'Inconclusive' ? 'Medium' : 'Low',
         status: openPaper.conclusion === 'Satisfactory' ? 'Closed' : 'Open',
         exceptions: openPaper.exceptionsFound || undefined,

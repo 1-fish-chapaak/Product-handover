@@ -56,6 +56,7 @@ import {
   type ImportRow, type RacmFieldKey,
 } from './racmImport';
 import { PROCUREMENT_RACM_ROWS, type ProcurementRacmRow } from '../../data/procurement-racm';
+import { withSopSources } from './sopPages';
 import type { Control, Nature } from './types';
 
 /** The one process this seed speaks for. Everything else keeps its template. */
@@ -142,9 +143,9 @@ function chooseRows(rules: ReturnType<typeof readPromptRules>): ProcurementRacmR
       if (r) stated.push(r);
     }
   }
-  // Point 7 of the prompt. Taken out of the prompt, Ira stops offering them —
-  // and these are the rows the source itself marks as proposals.
-  const proposed = rules.suggestExtras ? pool.filter(r => r.confidence === 'RECOMMENDED') : [];
+  // NO SUGGESTIONS (7 Oct, user's call): Ira extracts only what the SOP says,
+  // so the rows the source marks RECOMMENDED are never offered.
+  const proposed: ProcurementRacmRow[] = [];
   // Chosen breadth-first, read back in the SOP's own order — Review lists rows
   // in the order they were drafted, and a reviewer following the document should
   // not be sent back to budgeting after reaching payment. Ira's proposals stay
@@ -219,7 +220,10 @@ export function draftProcurementSopRows(
 export function draftSopRows(
   process: string, fileName: string, prompt: string, existing: Control[], entity = '',
 ): ImportRow[] {
-  return hasProcurementSop(process)
+  const rows = hasProcurementSop(process)
     ? draftProcurementSopRows(fileName, prompt, existing, entity)
     : draftRowsFromSop(process, fileName, prompt, existing, entity);
+  // Every row learns where in the SOP it was read (7 Oct) — the page, the lines
+  // and the "how to test" paragraph. One pass for both drafters.
+  return withSopSources(process, rows);
 }

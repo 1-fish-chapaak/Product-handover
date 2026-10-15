@@ -332,11 +332,6 @@ export default function ControlRegister() {
           onChange={v => setGroupBy(v as GroupBy)} ariaLabel="Group the register by" align="right" />
         {/* Dense wears the dropdown's trigger shape, not `.filter-pill` — that
             class is 28px tall and everything else on this row is 36px. */}
-        {layout === 'table' && (
-          <button onClick={() => setDense(d => !d)} className={triggerCls(dense, false)} aria-pressed={dense}>
-            <Rows3 size={13} className={dense ? 'text-brand-600' : 'text-ink-400'} /> Dense
-          </button>
-        )}
         {/* view toggle — the platform's ToolbarViewToggle (shared/ListToolbar.tsx) to the
             letter: list on the left, grid on the right, same icons and active chip. Only the
             shell height follows this toolbar's h-9 rhythm instead of the Reports h-10. */}
@@ -348,6 +343,15 @@ export default function ControlRegister() {
             className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><List size={16} /></button>
           <button onClick={() => setLayout('cards')} title="Grid view" aria-label="Grid view" aria-pressed={layout === 'cards'}
             className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={16} /></button>
+          {/* Dense lives in the view group now (8 Oct, decluttering) — it is a
+              way of looking at the list, so it sits with list/grid. List only. */}
+          {layout === 'table' && (
+            <>
+              <span className="w-px h-4 bg-canvas-border mx-0.5" aria-hidden />
+              <button onClick={() => setDense(d => !d)} title="Dense rows" aria-label="Dense rows" aria-pressed={dense}
+                className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', dense ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><Rows3 size={16} /></button>
+            </>
+          )}
         </div>
         {/* the register's actions — view controls to their left, primary CTA last */}
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
@@ -361,18 +365,18 @@ export default function ControlRegister() {
               anonymous — an unlabelled icon next to a labelled report reads as
               "what is this?", which is exactly the question it caused.
               Absent for the risk owner: see the note on the control page. */}
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
           {/* the Internal Controls Status Report — what management and the board
               actually read: the observations, what they are worth, and who has
               committed to the fix. The button says "Reports" (user, 25 Sep): the
               full name is the document's, not a toolbar's. */}
-          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
+          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
           {/* Add RACM (S11) — copies controls in from RACMs on the Engagements
               page's RACM tab, into the ENGAGEMENT. Engagement level only: inside
               an audit this register is that cycle's scope, which was fixed when
               the audit was created, so controls added from here would either not
               show in the list or quietly widen a scope already being tested. */}
-          {role === 'auditor' && !isEngagementLocked(eng) && !openAuditId && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs in the RACM Library" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
+          {role === 'auditor' && !isEngagementLocked(eng) && !openAuditId && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs in the RACM Library" className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -400,8 +404,9 @@ export default function ControlRegister() {
         </div>
       )}
 
-      {/* KPI rail — the summary band above the list (Overview's tile language) */}
-      <div className="flex items-stretch gap-3 mb-4 flex-wrap">
+      {/* KPI rail — one quiet strip, not five boxes (8 Oct, decluttering):
+          the count leads, its label sits beside it, hairlines between. */}
+      <div className="inline-flex items-center flex-wrap mb-4 rounded-xl border border-canvas-border bg-canvas-elevated divide-x divide-canvas-border">
         {[
           { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: scoped.length, t: 'text-ink-900' },
           { k: 'Tests due now', v: testsDueNow(scoped, openAudit).length, t: 'text-mitigated-700' },
@@ -409,9 +414,9 @@ export default function ControlRegister() {
           { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
           { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
         ].map(s => (
-          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
-            <div className={cn('text-[1.25rem] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
-            <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
+          <div key={s.k} className="px-4 py-2 flex items-baseline gap-2">
+            <span className={cn('text-[1.0625rem] font-bold tabular-nums', s.t)}>{s.v}</span>
+            <span className="text-[0.75rem] text-ink-500 font-medium whitespace-nowrap">{s.k}</span>
           </div>
         ))}
       </div>

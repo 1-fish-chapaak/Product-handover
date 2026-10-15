@@ -13,7 +13,7 @@
 
 import type { DownloadPreviewSection, DownloadPreviewKpi } from './ReportDownloadModal';
 import type { ReportExportContext } from './reportExport';
-import { brandGradient, brandAccent, isValidHexColor } from './reportShared';
+import { brandGradient, brandAccent, isValidHexColor, lerpHexColor } from './reportShared';
 
 const INK = '#0F0720';
 const MUTED = '#6B5D82';
@@ -383,10 +383,25 @@ function pageBlocks(sections: DownloadPreviewSection[]): DownloadPreviewSection[
  *  not by an inline canvas — an inline rectangle has to be pulled back into
  *  place with a negative margin, which drifts the moment the title wraps to a
  *  different number of lines. */
+// The cover band, painted as the gradient the screen shows rather than a flat
+// fill. pdfmake has no gradient primitive, so it is laid down as a stack of
+// thin bands stepping from one stop to the other — at this height the steps are
+// well under a point each and read as a continuous wash.
+const BAND_STEPS = 64;
 function coverBackground(deep: string, mid: string) {
+  const h = BAND_H / BAND_STEPS;
+  const bands = Array.from({ length: BAND_STEPS }, (_, i) => ({
+    type: 'rect' as const,
+    x: 0,
+    y: i * h,
+    w: PAGE_W,
+    // Overlap each band by a hair so no seam shows between them.
+    h: h + 0.6,
+    color: lerpHexColor(deep, mid, i / (BAND_STEPS - 1)),
+  }));
   return (currentPage: number) => (currentPage !== 1 ? null : {
     canvas: [
-      { type: 'rect', x: 0, y: 0, w: PAGE_W, h: BAND_H, color: deep },
+      ...bands,
       { type: 'rect', x: 0, y: BAND_H, w: PAGE_W, h: 5, color: mid },
     ],
   });
@@ -509,8 +524,10 @@ function closingPage(ctx: ReportExportContext, accent: string): Content[] {
  */
 export async function exportReportPdfFile(ctx: ReportExportContext): Promise<void> {
   const pdfMake = await loadPdfMake();
-  const [deep, mid] = brandGradient(isValidHexColor(ctx.brandColor) ? ctx.brandColor : undefined);
-  const accent = brandAccent(isValidHexColor(ctx.brandColor) ? ctx.brandColor : undefined);
+  // The report's own letterhead: the exact stops the screen draws when it has
+  // them (a named template theme is a pair, not one hex), else the brand colour.
+  const [deep, mid] = ctx.gradient ?? brandGradient(isValidHexColor(ctx.brandColor) ? ctx.brandColor : undefined);
+  const accent = ctx.accent ?? brandAccent(isValidHexColor(ctx.brandColor) ? ctx.brandColor : undefined);
   const showPageNo = ctx.pageNumbers !== false;
 
   // Cover and contents are not body sections; the preview drops them the same way.

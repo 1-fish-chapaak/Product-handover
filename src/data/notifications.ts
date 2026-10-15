@@ -27,7 +27,7 @@ export interface NotificationLink {
   view: View;
   // Soft hint for what to focus once the target view loads. v1 doesn't
   // wire these into module navigation — extension point for later.
-  ref?: { kind: 'exception' | 'workflow' | 'engagement' | 'report' | 'dashboard'; id: string };
+  ref?: { kind: 'exception' | 'workflow' | 'engagement' | 'report' | 'dashboard' | 'racm-draft'; id: string };
 }
 
 export interface PlatformNotification {

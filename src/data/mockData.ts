@@ -136,19 +136,19 @@ export const WORKFLOWS = [
 
 // ─── Report Templates ───
 export const REPORT_TEMPLATES = [
-  { id: "rt-internal-audit", name: "Internal Audit Report", desc: "End-to-end audit report with executive summary, audit queries, findings, and recommendations", category: "Audit", icon: "file-text", sections: [
-    { name: 'Executive Summary', icon: 'file-text' },
-    { name: 'Audit Queries', icon: 'check-circle' },
-    { name: 'Recommendations', icon: 'trending-up' },
-    { name: 'Appendix', icon: 'file-text' },
-  ]},
-  { id: "rt-007", name: "Action Taken Report", desc: "Query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
+  { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with query-wise summary, closure status, key insights, auditor comments, and sign-off.", category: "Audit", icon: "clipboard-check", sections: [
     { name: 'Report Information', icon: 'file-text' },
     { name: 'Query-wise Summary', icon: 'check-circle' },
     { name: 'Summary of Closure Status', icon: 'bar-chart' },
     { name: 'Key Insights & Recommendations', icon: 'lightbulb' },
     { name: 'Auditor Comments', icon: 'book-open' },
     { name: 'Approvals & Sign-Off', icon: 'shield' },
+  ]},
+  { id: "rt-internal-audit", name: "Internal Audit Report", desc: "End-to-end audit report with executive summary, audit queries, findings, and recommendations.", category: "Audit", icon: "file-text", sections: [
+    { name: 'Executive Summary', icon: 'file-text' },
+    { name: 'Audit Queries', icon: 'check-circle' },
+    { name: 'Recommendations', icon: 'trending-up' },
+    { name: 'Appendix', icon: 'file-text' },
   ]},
   // { id: "rt-002", name: "Risk Assessment Summary", desc: "Overview of all identified risks, their ratings, and mitigation status", category: "Risk", icon: "alert-triangle", sections: [
   //   { name: 'Executive Summary', icon: 'file-text' },

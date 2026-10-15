@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  Calendar, Trash2,
-  ClipboardList, ListChecks, CircleDot, CheckCircle2, Clock,
+  Calendar, Trash2, ChevronDown,
+  ClipboardList, ListChecks, CircleDot, CheckCircle2, Clock, AlertTriangle,
 } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
@@ -12,6 +12,7 @@ import type {
 import { computeExecSummary } from './atrTemplate';
 import { ReportNumberedHeading, ReportBrandBanner, ReportKpiTiles } from './ReportDocumentChrome';
 import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from './atrSections';
+import { templateCarries } from './templateFields';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -31,6 +32,7 @@ const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'Design Deficiency': 'bg-high-50 text-high-700',
   'System Deficiency': 'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
+  Other: 'bg-paper-100 text-ink-600',
 };
 // Observation severity (risk significance) pill.
 const SEVERITY_PILL: Record<AtrRisk, string> = {
@@ -147,7 +149,7 @@ export default function AtrDocument({
   editable, onMetaChange, onObservationsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
   renderObservationActions, renderObservationFooter, onDeleteSection,
-  gradient, logo,
+  gradient, logo, headerText, footerText, headerFields, bodyFields, kpiFields, summaryColumns,
 }: {
   meta: AtrMeta;
   observations: AtrObservation[];
@@ -159,6 +161,20 @@ export default function AtrDocument({
   /** Letterhead branding carried from an applied template, so the format picked
    *  in the reader's command bar actually shows on the ATR's cover. */
   gradient?: [string, string];
+  /** The header fields the report format carries, or null/undefined when the
+   *  format has no opinion. A format built by ticking boxes prints exactly its
+   *  list; everything else keeps printing whatever the report holds. */
+  headerFields?: string[] | null;
+  /** The observation fields the format carries, same rule. */
+  bodyFields?: string[] | null;
+  /** The Executive Summary tiles the format carries, same rule. */
+  kpiFields?: string[] | null;
+  /** The Observation Wise Summary columns the format carries, same rule. */
+  summaryColumns?: string[] | null;
+  /** The format's confidentiality / header line, stamped top-right. */
+  headerText?: string;
+  /** The format's footer line, printed under the last section. */
+  footerText?: string;
   logo?: string;
   /** Width of the document surface. */
   maxWidthClass?: string;
@@ -183,6 +199,9 @@ export default function AtrDocument({
   const ex = computeExecSummary(observations);
 
   const setMeta = (key: keyof AtrMeta, v: string) => onMetaChange?.({ ...meta, [key]: v || undefined });
+  // The cover facts this report's format prints. A format with no opinion
+  // prints them all, as every ATR did before formats carried field lists.
+  const shownFacts = META_FACTS.filter(f => templateCarries(headerFields ?? null, f.key as string));
   // Admin-added custom fields the user filled in: [key, label, value].
   const customFacts: [string, string, string][] = Object.entries(meta.custom ?? {})
     .filter(([, v]) => !!v)
@@ -194,19 +213,20 @@ export default function AtrDocument({
   const [pendingDelete, setPendingDelete] = useState<{ title: string; description: string; run: () => void } | null>(null);
   const confirmDelete = (title: string, description: string, run: () => void) => setPendingDelete({ title, description, run });
 
-  // Executive Summary — five KPIs (observation breakdown + action plans).
-  // Overdue observations fold into Open; "Partially Closed" = In Progress.
-  const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
-  const kpis: { label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
-    { label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
-    { label: 'Observations Open', value: openCount, tone: 'high', icon: CircleDot },
-    { label: 'Observations Partially Closed', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
-    { label: 'Observations Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
-    { label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
+  // Executive Summary — the observation breakdown first (the four statuses add
+  // up to the Observations count, so an overdue observation reads as Open),
+  // then the action-plan total and the ones past their due date.
+  // Keyed to the template editor's tile list, so a format that drops a tile
+  // drops it from the report too.
+  const allKpis: { key: string; label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
+    { key: 'observations', label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
+    { key: 'obsOpen', label: 'Observations Open', value: ex.obsStatus.Open + ex.obsStatus.Overdue, tone: 'high', icon: CircleDot },
+    { key: 'obsPartial', label: 'Observations Partially Closed', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
+    { key: 'obsClosed', label: 'Observations Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
+    { key: 'actionPlans', label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
+    { key: 'plansOverdue', label: 'Action Plans Overdue', value: ex.actionStatus.Overdue, tone: 'risk', icon: AlertTriangle },
   ];
-
-  const displayStatus = (s?: AtrObservationStatus): 'Open' | 'Partially Closed' | 'Closed' =>
-    s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'Partially Closed' : 'Open';
+  const kpis = allKpis.filter(k => templateCarries(kpiFields ?? null, k.key));
 
   // ── Section bodies (keyed so order/visibility props drive them) ──
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
@@ -224,57 +244,7 @@ export default function AtrDocument({
     process: n => (
       <>
         <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Severity, action plans and status — per observation" />
-        <div className="overflow-hidden rounded-lg border border-canvas-border">
-          <table className="w-full text-[0.75rem]">
-            <thead>
-              <tr className="bg-brand-50/60 text-ink-700 text-left">
-                <th className="px-4 py-2.5 font-semibold">Observation &amp; Action Plans</th>
-                <th className="px-3 py-2.5 font-semibold text-center w-[110px]">Severity</th>
-                <th className="px-3 py-2.5 font-semibold text-center w-[120px]">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {observations.map((o, i) => {
-                const st = displayStatus(o.status);
-                const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'Partially Closed' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
-                return (
-                  <motion.tr
-                    key={i}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
-                    className="border-t border-canvas-border align-top"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
-                      {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
-                      {o.actionPlans.length > 0 && (
-                        <ul className="mt-2 space-y-1.5">
-                          {o.actionPlans.map((p, j) => {
-                            const ap = p.status ? ACTION_STATUS[p.status] : null;
-                            return (
-                              <li key={j} className="flex items-center gap-2 flex-wrap">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ap?.dot ?? 'bg-ink-300'}`} aria-hidden="true" />
-                                <span className="text-[0.6875rem] text-ink-700">{p.title || p.text || `Action plan ${j + 1}`}</span>
-                                {p.status && <span className={`inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-semibold ${ap?.pill ?? ''}`}>{p.status}</span>}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {o.risk && <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${SEVERITY_PILL[o.risk]}`}>{o.risk}</span>}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${stCls}`}>{st}</span>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ObservationSummaryTable observations={observations} columns={summaryColumns ?? null} />
       </>
     ),
     details: n => (
@@ -282,7 +252,7 @@ export default function AtrDocument({
         <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, action plan and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
-            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} footer={renderObservationFooter?.(i)} />
+            <ObservationCard key={i} index={i + 1} obs={o} fields={bodyFields ?? null} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} footer={renderObservationFooter?.(i)} />
           ))}
         </div>
       </>
@@ -304,6 +274,7 @@ export default function AtrDocument({
         title="Action Taken Report"
         gradient={gradient}
         logo={logo}
+        headerText={headerText}
         actions={headerActions}
         className="!py-7"
       />
@@ -314,7 +285,7 @@ export default function AtrDocument({
       {editable ? (
         <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
-            {META_FACTS.map(f => (
+            {shownFacts.map(f => (
               <MetaCell key={f.key} label={f.label} value={meta[f.key] as string | undefined} onCommit={v => setMeta(f.key, v)} />
             ))}
             {customFacts.map(([key, label, value]) => (
@@ -322,13 +293,13 @@ export default function AtrDocument({
             ))}
           </div>
         </div>
-      ) : (META_FACTS.some(f => meta[f.key]) || meta.reportId || customFacts.length > 0) && (
+      ) : (shownFacts.some(f => meta[f.key]) || meta.reportId || customFacts.length > 0) && (
         <div className="px-9 py-6 border-b border-canvas-border">
           {/* Every report-details field the user filled in prints here; the
               empty ones are left out. */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
-            <MetaFact label="Report Name" value={meta.reportName ?? meta.reportId} />
-            {META_FACTS.filter(f => f.key !== 'reportName').map(f => (
+            {templateCarries(headerFields ?? null, 'reportName') && <MetaFact label="Report Name" value={meta.reportName ?? meta.reportId} />}
+            {shownFacts.filter(f => f.key !== 'reportName').map(f => (
               <MetaFact key={f.key} label={f.label} value={meta[f.key] as string | undefined} />
             ))}
             {customFacts.map(([key, label, value]) => <MetaFact key={key} label={label} value={value} />)}
@@ -358,6 +329,14 @@ export default function AtrDocument({
           </section>
         );
       })}
+
+      {/* The format's own closing line, printed where a report footer
+          belongs — the last thing on the page, under a hairline. */}
+      {footerText && (
+        <div className="px-9 py-5 border-t border-canvas-border">
+          <p className="text-[0.6875rem] text-ink-500 leading-relaxed">{footerText}</p>
+        </div>
+      )}
     </article>
     <ConfirmationModal
       open={pendingDelete !== null}
@@ -373,21 +352,154 @@ export default function AtrDocument({
   );
 }
 
-function ObservationCard({ index, obs, editable, onChange, onDelete, actions, footer }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode; footer?: React.ReactNode }) {
+/** An observation's action plans bucketed for the summary table. A plan is
+ *  closed only when Implemented; Partially Implemented is still open work. */
+function planCounts(o: AtrObservation) {
+  let closed = 0, overdue = 0;
+  o.actionPlans.forEach(p => {
+    if (p.status === 'Overdue') overdue += 1;
+    else if (p.status === 'Implemented') closed += 1;
+  });
+  return { total: o.actionPlans.length, open: o.actionPlans.length - closed - overdue, closed, overdue };
+}
+
+function displayStatus(s?: AtrObservationStatus): 'Open' | 'Partially Closed' | 'Closed' {
+  return s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'Partially Closed' : 'Open';
+}
+
+/** Observation Wise Summary. One control for the whole section shows or hides
+ *  the action plans under every observation — the counts always read, and the
+ *  plan lists come in when the reader wants the detail behind them. */
+function ObservationSummaryTable({ observations, columns }: { observations: AtrObservation[]; columns?: string[] | null }) {
+  const [showPlans, setShowPlans] = useState(false);
+  // A zero is context, not a finding — it stays quiet.
+  const num = (v: number, tone: string) => <span className={`tabular-nums font-semibold ${v === 0 ? 'text-ink-300' : tone}`}>{v}</span>;
+
+  // The columns beside the observation's own name, keyed to the template
+  // editor's list. The four counts share one width so the gaps between them
+  // read as a rhythm; the two pill columns are wide enough that
+  // "Partially Closed" never wraps. A format that drops a column drops it from
+  // the header, the body and the action-plan rows' span alike.
+  const ALL: { key: string; label: string; title?: string; cls: string; cell: (o: AtrObservation) => React.ReactNode }[] = [
+    { key: 'plans', label: 'Plans', title: 'Total action plans on this observation', cls: 'px-2 w-[74px]', cell: o => num(planCounts(o).total, 'text-ink-800') },
+    { key: 'open', label: 'Open', title: 'Action plans still to be completed', cls: 'px-2 w-[74px]', cell: o => num(planCounts(o).open, 'text-high-700') },
+    { key: 'closed', label: 'Closed', title: 'Action plans implemented', cls: 'px-2 w-[74px]', cell: o => num(planCounts(o).closed, 'text-compliant-700') },
+    { key: 'overdue', label: 'Overdue', title: 'Action plans past their due date', cls: 'px-2 w-[74px]', cell: o => num(planCounts(o).overdue, 'text-risk-700') },
+    { key: 'severity', label: 'Severity', cls: 'px-3 w-[104px]', cell: o => o.risk && <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${SEVERITY_PILL[o.risk]}`}>{o.risk}</span> },
+    {
+      key: 'status',
+      label: 'Status',
+      cls: 'px-3 w-[136px]',
+      cell: o => {
+        const st = displayStatus(o.status);
+        const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'Partially Closed' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
+        return <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${stCls}`}>{st}</span>;
+      },
+    },
+  ];
+  const cols = ALL.filter(c => templateCarries(columns ?? null, c.key));
+  // An action plan's own status reads down the Status column with its
+  // observation's; everything between is spanned. With Status dropped the plan
+  // row simply spans the rest.
+  const statusLast = cols.length > 0 && cols[cols.length - 1].key === 'status';
+  const spanned = statusLast ? cols.length - 1 : cols.length;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-canvas-border">
+      <table className="w-full text-[0.75rem]">
+        <thead>
+          <tr className="bg-brand-50/60 text-ink-700 text-left">
+            <th className="px-4 py-2.5 font-semibold">
+              <button
+                type="button"
+                onClick={() => setShowPlans(v => !v)}
+                aria-expanded={showPlans}
+                title={showPlans ? 'Hide the action plans under every observation' : 'Show the action plans under every observation'}
+                className="inline-flex items-center gap-1.5 -ml-1 px-1 py-0.5 rounded-sm font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-100/60 cursor-pointer transition-colors print:hidden"
+              >
+                Observation &amp; Action Plans
+                <ChevronDown size={13} aria-hidden="true" className={`text-ink-400 transition-transform ${showPlans ? 'rotate-180' : ''}`} />
+              </button>
+              <span className="hidden print:inline">Observation &amp; Action Plans</span>
+            </th>
+            {cols.map(c => (
+              <th key={c.key} className={`py-2.5 font-semibold text-center whitespace-nowrap ${c.cls}`} title={c.title}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {observations.flatMap((o, i) => [
+            <motion.tr
+              key={i}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+              className="border-t border-canvas-border align-top"
+            >
+              <td className="px-4 py-3">
+                <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
+                {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
+              </td>
+              {cols.map(c => <td key={c.key} className={`py-3 text-center ${c.cls}`}>{c.cell(o)}</td>)}
+            </motion.tr>,
+            // One row per action plan, so its status reads down the Status
+            // column with the observation's. Paper has no drop-down, so print
+            // always carries them.
+            ...o.actionPlans.map((p, j) => {
+              const ap = p.status ? ACTION_STATUS[p.status] : null;
+              return (
+                <tr key={`${i}-p${j}`} className={`border-t border-canvas-border/60 bg-canvas/30 ${showPlans ? '' : 'hidden print:table-row'}`}>
+                  <td className="px-4 py-2 pl-9">
+                    <span className="flex items-start gap-2">
+                      <span className={`w-1.5 h-1.5 mt-1.5 rounded-full shrink-0 ${ap?.dot ?? 'bg-ink-300'}`} aria-hidden="true" />
+                      <span className="text-[0.6875rem] text-ink-700 leading-snug">{p.title || p.text || `Action plan ${j + 1}`}</span>
+                    </span>
+                  </td>
+                  {spanned > 0 && <td colSpan={spanned} />}
+                  {statusLast && (
+                    <td className="px-3 py-2 text-center">
+                      {p.status && <span className="text-[0.6875rem] text-ink-900 whitespace-nowrap">{p.status}</span>}
+                    </td>
+                  )}
+                </tr>
+              );
+            }),
+          ])}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** The observation fields that print inside an action plan rather than on the
+ *  observation itself. A format carrying none of them prints no plans. */
+const PLAN_FIELD_KEYS = ['actionPlanTitle', 'actionTakenStatus', 'recommendation', 'actionTaken', 'verification', 'dueDate', 'classification'];
+
+function ObservationCard({ index, obs, fields, editable, onChange, onDelete, actions, footer }: { index: number; obs: AtrObservation; fields?: string[] | null; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode; footer?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
+  // What this report format prints on an observation. A format with no opinion
+  // prints the lot, exactly as before.
+  const has = (key: string) => templateCarries(fields ?? null, key);
+  // An action plan is only worth printing when the format carries at least one
+  // of its fields. Otherwise the block is nothing but an “ACTION PLAN N” label
+  // over empty space, which is what a format that ticked none of them asked for.
+  const anyPlanField = PLAN_FIELD_KEYS.some(has);
+  const showDescription = has('description') && (!!obs.description || !!editable);
   return (
     <div className="border border-canvas-border rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+      <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span className="shrink-0 w-7 h-7 rounded-md bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
             <h3 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight"><EditableText value={obs.title} editable={editable} onCommit={v => onChange?.({ ...obs, title: v })} /></h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {obs.status && (() => {
+        {/* Status, annexures and Manage stay on the title's own line, hard
+            against the right corner — they never wrap under a long title. */}
+        <div className="flex items-center gap-2 shrink-0">
+          {has('observationStatus') && obs.status && (() => {
             const s: AtrObservationStatus = obs.status === 'Overdue' ? 'Open' : obs.status;
             const label = s === 'In Progress' ? 'Partially Closed' : s;
             return (
@@ -411,42 +523,46 @@ function ObservationCard({ index, obs, editable, onChange, onDelete, actions, fo
         </div>
       </div>
 
+      {(showDescription || anyPlanField) && (
       <div className="px-5 py-4">
-        {(obs.description || editable) && (
+        {showDescription && (
           <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-2 items-start mb-4">
             <FieldRow label="Issue Description" value={obs.description} editable={editable} onCommit={v => onChange?.({ ...obs, description: v })} />
           </div>
         )}
-        <div className="space-y-5">
-          {obs.actionPlans.map((ap, i) => (
-            <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} editable={editable} onChange={next => setPlan(i, next)} />
-          ))}
-        </div>
+        {anyPlanField && (
+          <div className="space-y-5">
+            {obs.actionPlans.map((ap, i) => (
+              <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} has={has} editable={editable} onChange={next => setPlan(i, next)} />
+            ))}
+          </div>
+        )}
       </div>
+      )}
       {footer}
     </div>
   );
 }
 
-function ActionPlanCard({ index, plan, classification, editable, onChange }: { index: number; plan: AtrActionPlan; classification?: AtrClassification; editable?: boolean; onChange?: (next: AtrActionPlan) => void }) {
+function ActionPlanCard({ index, plan, classification, has, editable, onChange }: { index: number; plan: AtrActionPlan; classification?: AtrClassification; has: (key: string) => boolean; editable?: boolean; onChange?: (next: AtrActionPlan) => void }) {
   const tone = plan.status ? ACTION_STATUS[plan.status] : null;
   // Flat block — the MAP pill delimits the action plan; no left rail.
   return (
     <div>
       <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
         <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Action Plan {index}</span>
-        {(plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
+        {has('actionPlanTitle') && (plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-        {plan.dueDate ? (
+        {has('dueDate') && plan.dueDate ? (
           <span className="inline-flex items-center gap-1.5 h-7 px-3 text-[0.75rem] font-semibold rounded-full bg-brand-50 text-brand-700"><Calendar size={12} /> Due {fmt(plan.dueDate)}</span>
         ) : <span />}
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {classification && (
+          {has('classification') && classification && (
             <span className={`inline-flex items-center h-7 px-3 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>{classification}</span>
           )}
-          {plan.status && tone && (
+          {has('actionTakenStatus') && plan.status && tone && (
             <span className={`inline-flex items-center gap-1.5 h-7 px-3 text-[0.6875rem] font-bold uppercase tracking-wider rounded-full ${tone.pill}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />{plan.status === 'Pending' ? 'In-Progress' : plan.status}
             </span>
@@ -454,11 +570,11 @@ function ActionPlanCard({ index, plan, classification, editable, onChange }: { i
         </div>
       </div>
 
-      {(plan.text || plan.actionTaken || plan.verification || editable) && (
+      {((has('recommendation') && (plan.text || editable)) || (has('actionTaken') && (plan.actionTaken || editable)) || (has('verification') && (plan.verification || editable))) && (
         <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-canvas-border pt-3.5">
-          <FieldRow label="Action Plan Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />
-          <FieldRow label="Action Taken" value={plan.actionTaken} editable={editable} onCommit={v => onChange?.({ ...plan, actionTaken: v })} />
-          <FieldRow label="Auditor Verification" value={plan.verification} editable={editable} onCommit={v => onChange?.({ ...plan, verification: v })} />
+          {has('recommendation') && <FieldRow label="Action Plan Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />}
+          {has('actionTaken') && <FieldRow label="Action Taken" value={plan.actionTaken} editable={editable} onCommit={v => onChange?.({ ...plan, actionTaken: v })} />}
+          {has('verification') && <FieldRow label="Auditor Verification" value={plan.verification} editable={editable} onCommit={v => onChange?.({ ...plan, verification: v })} />}
         </div>
       )}
     </div>

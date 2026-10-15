@@ -81,7 +81,7 @@ export type PermissionKey =
   // proposals in My Queue, administer org rules & policy in Admin
   | 'mem_view' | 'mem_approve' | 'mem_admin'
   // Admin (existing 2 + new 4 + usage)
-  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_export';
+  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_people' | 'ad_usage_export' | 'ad_escalation_manage';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -188,6 +188,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     // team across the workspace.
     { key: 'ad_usage_people', name: 'Per-person Usage', desc: 'See named member and team activity in Platform Usage' },
     { key: 'ad_usage_export', name: 'Export Usage',     desc: 'Export platform usage as CSV' },
+    { key: 'ad_escalation_manage', name: 'Manage Approvals & Escalation', desc: 'Create approval flows and escalation matrices for observation close-out' },
   ]},
 ];
 

@@ -16,7 +16,7 @@
  * Pre-testing review is not here — it belongs to each engagement's copy.
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { CheckCircle2, FileSpreadsheet, FileText, History, LayoutGrid, List, Lock, MoreHorizontal, Search, Table2, Trash2, Workflow, X } from 'lucide-react';
 import './register.css';
@@ -29,6 +29,7 @@ import { FilterSelect } from '../shared/FilterSelect';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, menuItem } from './ControlDossier';
 import CreateRacmFlow from './CreateRacmFlow';
+import { takeSopDraftToOpen, type BackgroundSopDraft } from './sopBackgroundDrafts';
 import SopFlowchartView from './SopFlowchartView';
 import { chartRowsFromControls } from './sopChartFromRacm';
 import { currentVersion, deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, type LibraryRacm } from './racmLibrary';
@@ -327,6 +328,14 @@ export default function RacmLibraryView({ canManage, creating, setCreating, onOp
   setCreating: (open: boolean) => void;
 }) {
   const racms = useRacmLibrary();
+  // An SOP draft Ira finished after the reader left (stage 5): its notification
+  // brings them here, and the draft reopens at its Flowchart.
+  const [resuming, setResuming] = useState<BackgroundSopDraft | undefined>(() => takeSopDraftToOpen());
+  useEffect(() => {
+    const open = () => { const d = takeSopDraftToOpen(); if (d) setResuming(d); };
+    window.addEventListener('irame:open-sop-draft', open);
+    return () => window.removeEventListener('irame:open-sop-draft', open);
+  }, []);
   /* A refused publish or delete is said on the card or row it was for, in one
      line — `noteFor` says which one. */
   const rowNote = useInlineNote();
@@ -539,10 +548,10 @@ export default function RacmLibraryView({ canManage, creating, setCreating, onOp
         </>
       )}
 
-      {creating && (
-        <CreateRacmFlow onClose={() => setCreating(false)}
+      {(creating || resuming) && (
+        <CreateRacmFlow onClose={() => { setCreating(false); setResuming(undefined); }} resume={resuming}
           onCreated={r => {
-            setCreating(false); setProcess('All'); setSearch(''); setStatus('All');
+            setCreating(false); setResuming(undefined); setProcess('All'); setSearch(''); setStatus('All');
             const n = r.controls.length;
             const how = r.source === 'sop' ? 'Extracted' : 'Imported';
             createdNote.show('info', racmStatus(r).status === 'Draft'

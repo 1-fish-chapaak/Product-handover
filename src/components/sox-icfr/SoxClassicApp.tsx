@@ -137,22 +137,21 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const topBar = (
     <div className={cn('bg-canvas shrink-0', view === 'racm-editor' && 'border-b border-canvas-border')}>
       <div className="max-w-330 mx-auto px-6 pt-4">
+        {/* The trail, in the Process Hub's language. It carries the code, so
+            the title below stands alone — the tab bar already names the tab. */}
         {onBack && (
-          <button
-            onClick={onBack}
-            aria-label={backLabel}
-            className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"
-          >
-            <ArrowLeft size={15} /> {backLabel}
-          </button>
+          <SoxBreadcrumb items={[
+            { label: backCrumb, onClick: onBack },
+            { label: eng.code },
+          ]} />
         )}
-        <div className="mt-3 flex items-start gap-3.5">
-          <span className="w-12 h-12 rounded-xl bg-brand-600 text-white text-[0.875rem] font-semibold flex items-center justify-center shrink-0 select-none" aria-hidden>{initials}</span>
+        <div className={cn('flex items-center gap-3', !onBack && 'mt-3')}>
+          <span className="w-10 h-10 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold flex items-center justify-center shrink-0 select-none" aria-hidden>{initials}</span>
           <div className="min-w-0 flex-1">
             {/* One line: a long name truncates (full name on hover) so the
                 status and SOX / ICFR chips stay beside it, never wrap below. */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <h1 title={eng.name} className="text-[1.375rem] leading-7 font-bold text-ink-900 tracking-tight truncate min-w-0">{eng.name}</h1>
+              <h1 title={eng.name} className="text-[1.25rem] leading-7 font-bold text-ink-900 tracking-tight truncate min-w-0">{eng.name}</h1>
               {concluded ? (
                 <span title={`Signed off — ${concludedBy?.preparer?.by}, countersigned ${concludedBy?.reviewer?.by}`} className="text-[0.75rem] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-5.5 inline-flex items-center gap-1 rounded-full shrink-0">
                   <BadgeCheck size={11} /> Concluded
@@ -163,9 +162,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
               {/* Module chip — same job as the type pill on the production header. */}
               <span className="text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-2 h-5.5 inline-flex items-center rounded-full shrink-0">SOX / ICFR</span>
             </div>
-            <div className="mt-1 text-[0.75rem] text-ink-500">
-              <span className="font-mono font-semibold">{eng.code}</span>
-            </div>
+            {!onBack && (
+              <div className="mt-1 text-[0.75rem] text-ink-500">
+                <span className="font-mono font-semibold">{eng.code}</span>
+              </div>
+            )}
           </div>
           {/* The switcher is a demo affordance — it previews the other persona
               without changing who is signed in, hence the "Viewing as" prefix.

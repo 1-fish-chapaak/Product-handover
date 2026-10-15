@@ -4373,6 +4373,11 @@ export function sameFlawElsewhere(eng: IcfrEngagement, d: Deficiency): { unteste
   return { untested: peers.filter(x => !designStarted(x)), tested: peers.filter(x => designStarted(x)), check };
 }
 
+/** The RACM's two control-level design checks — what setting up an empty
+ *  design test lays down (the TOD empty state's Start the design test, and
+ *  Ira's Continue on a control in its zero state). */
+export const STARTER_DESIGN_CHECKS = ['Control addresses the stated risk and assertion.', 'Control operates at sufficient precision.'];
+
 export function suggestedDesignChecks(c: Control): string[] {
   // Control-level checks only, deliberately. The library offers control-level
   // considerations, and it decides "already covered" on keyword overlap — so
