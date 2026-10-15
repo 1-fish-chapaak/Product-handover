@@ -363,6 +363,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'governance-control-detail': 'ctrl_view',
   'racm-library': 'racm_view',
   'audit-risk-register': 'risk_view',
+  'risk-dashboard': 'risk_view',
   // Intelligence
   'dashboards': 'db_view',
   'dashboard-detail': 'db_view',

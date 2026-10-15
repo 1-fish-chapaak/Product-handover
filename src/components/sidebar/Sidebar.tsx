@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  MessageSquare, Workflow, Database, LayoutDashboard,
+  MessageSquare, Workflow, Database, LayoutDashboard, Gauge,
   FileBarChart, ChevronDown,
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
@@ -172,6 +172,12 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
   const buildsCount = buildsPending.needsInput.length + buildsPending.toReview.length;
   // A new client has no engagement exceptions yet — the queue starts empty.
   const freshWs = useFreshWorkspace();
+  // Clicking the page you're already on goes back to its start (e.g. from an
+  // open risk or control to the list) — the page listens for this.
+  const goTo = (v: View) => {
+    if (v === view) window.dispatchEvent(new CustomEvent('app:view-reselect', { detail: { view: v } }));
+    setView(v);
+  };
   const myQueueCount = useMemo(
     () => (freshWs ? 0 : myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length),
     [currentUser?.name, freshWs],
@@ -346,8 +352,9 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
           {/* RACM sits above the register and the library because it is where
               the other two come from. */}
           {can('racm_view') && item(Table2, 'RACM Library', view === 'racm-library', () => setView('racm-library'))}
-          {can('risk_view') && item(AlertTriangle, 'Risk Register', view === 'audit-risk-register', () => setView('audit-risk-register'))}
-          {can('ctrl_view') && item(Shield, 'Control Library', view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard', () => setView('governance-controls'))}
+          {can('risk_view') && item(Gauge, 'Risk Dashboard', view === 'risk-dashboard', () => goTo('risk-dashboard'))}
+          {can('risk_view') && item(AlertTriangle, 'Risk Register', view === 'audit-risk-register', () => goTo('audit-risk-register'))}
+          {can('ctrl_view') && item(Shield, 'Control Library', view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard', () => goTo('governance-controls'))}
           {can('wf_view') && item(Workflow, 'Workflow Library', workflowViews.includes(view), () => setView('workflow-library'))}
           {can('concierge_use') && item(Wand2, 'AI Concierge', aiConciergeViews.includes(view), () => setView('ai-concierge'))}
 

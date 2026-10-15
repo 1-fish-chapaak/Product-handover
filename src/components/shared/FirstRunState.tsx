@@ -8,7 +8,7 @@ import { ArrowRight } from 'lucide-react';
 import { Button } from './Button';
 import { useStdState, CHECK_CATALOG, readinessOf } from '../../data/auditPlan';
 
-export type FirstRunPage = 'engagements' | 'my-queue' | 'audit-planning' | 'risk-register' | 'reports' | 'insights';
+export type FirstRunPage = 'engagements' | 'my-queue' | 'audit-planning' | 'risk-register' | 'risk-dashboard' | 'reports' | 'insights';
 
 interface Cta { label: string; view: string }
 interface Copy { page: string; title: string; body: string; fills: string[]; primary: Cta; secondary?: Cta }
@@ -58,6 +58,18 @@ const COPY: Record<FirstRunPage, Copy> = {
       'Each risk with its rating, owner and process',
       'The controls that mitigate it — and which are tested live',
       'Gaps: risks no tested control covers',
+    ],
+    primary: { label: 'Create a RACM', view: 'racm-library' },
+    secondary: { label: 'Open the Control Library', view: 'governance-controls' },
+  },
+  'risk-dashboard': {
+    page: 'Risk Dashboard',
+    title: 'Nothing to chart yet',
+    body: 'The dashboard reads the risk register — ratings, how they move month to month, where risk sits and the actions against it. It fills in as risks arrive with your RACMs and their controls start running.',
+    fills: [
+      'Every risk rated, and what each rating sets in motion',
+      'How the rating mix and the residual score move month by month',
+      'Thematic review candidates where indicators cluster',
     ],
     primary: { label: 'Create a RACM', view: 'racm-library' },
     secondary: { label: 'Open the Control Library', view: 'governance-controls' },

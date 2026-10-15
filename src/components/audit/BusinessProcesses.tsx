@@ -33,7 +33,9 @@ type BulkAuditRun = { name: string; workflows: BulkRunWorkflowResult[]; skippedC
 import BPOverviewDashboard from './BPOverviewDashboard';
 import ProcessInsightsTab from './ProcessInsightsTab';
 import { PROCESS_INSIGHTS } from '../../data/insightMemory';
-import RiskRegister, { SEED_RISKS } from './RiskRegister';
+import { SEED_RISKS } from './RiskRegister';
+import RiskRegisterPage from '../risk/RiskRegisterPage';
+import { useErmRisks } from '../../data/erm/store';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import SopDocumentModal from './SopDocumentModal';
@@ -4984,6 +4986,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   const bpSops = SOPS.filter(s => s.bpId === bp.id);
   const bpWfs = WORKFLOWS.filter(w => w.bpId === bp.id);
   const bpRisks = RISKS.filter(r => r.bpId === bp.id);
+  // The Risks tab shows the Risk Register, so its badge counts the register.
+  const registerRiskCount = useErmRisks().filter(r => r.businessProcess === bp.abbr && r.status !== 'Archived').length;
   const bpRiskIds = new Set(bpRisks.map(r => r.id));
   const bpControls = CONTROLS.filter(c => bpRiskIds.has(c.riskId));
 
@@ -5127,7 +5131,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
     sop: { title: 'SOPs', count: bpSops.length, countLabel: 'documents', warning: bpSops.length === 0 ? 'no SOPs uploaded' : undefined },
     racm: { title: 'RACMs', count: racmCardsForBp.length, countLabel: 'matrices', warning: racmCardsForBp.length === 0 ? 'no RACMs yet' : undefined },
-    risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
+    risks: { title: 'Risks', count: registerRiskCount, countLabel: 'risks', warning: registerRiskCount === 0 ? 'no risks captured' : undefined },
     controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
     workflows: { title: 'Workflows', count: getSeedWorkflows(bp.abbr).length, countLabel: 'workflows', warning: getSeedWorkflows(bp.abbr).length === 0 ? 'no workflows linked' : undefined },
     'ai-insights': { title: 'AI Insights', count: PROCESS_INSIGHTS.length, countLabel: 'insights' },
@@ -5801,7 +5805,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
               </AnimatePresence>
             </div>
           )}
-          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
+          {drilledSection === 'risks' && <RiskRegisterPage processFilter={bp.abbr} embedded />}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
           {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} onBulkRunComplete={setBulkAuditRun} />}
           {drilledSection === 'ai-insights' && <ProcessInsightsTab bpAbbr={bp.abbr} bpName={bp.name} />}
