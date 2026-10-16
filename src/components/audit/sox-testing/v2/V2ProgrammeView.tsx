@@ -309,7 +309,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
             <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">Materiality</div>
             <SummaryRow label="Overall" value={fmtCr(p.materiality.overall)} note={p.materiality.basis === 'custom' ? 'Set directly' : `${p.materiality.pct}% of ${p.materiality.benchmarkLabel.toLowerCase()}`} />
             <SummaryRow label="Performance" value={fmtCr(pm)} strong note={`${p.materiality.pmPct}% — the scoping threshold`} />
-            <SummaryRow label="Clearly trivial" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
+            <SummaryRow label="Posting materiality" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
             {p.revisions.length > 0 && (
               <p className="text-[0.6875rem] text-evidence-700 mt-2">Revised mid-year — was {fmtCr(p.revisions[p.revisions.length - 1].fromOverall)}.</p>
             )}

@@ -316,7 +316,7 @@ function RacmTable({ rows, canManage, note, noteFor, onOpen, onDelete, onPublish
   );
 }
 
-export default function RacmLibraryView({ canManage, creating, setCreating, onOpenEditor }: {
+export default function RacmLibraryView({ canManage, creating, setCreating, onOpenEditor, createFor }: {
   /** Opens a RACM in the spreadsheet editor — a full page in this same tab. */
   onOpenEditor: (r: LibraryRacm) => void;
   /** Create and delete — the same permission that creates engagements. */
@@ -326,6 +326,10 @@ export default function RacmLibraryView({ canManage, creating, setCreating, onOp
    *  renders here, where finishing one can clear this view's filters. */
   creating: boolean;
   setCreating: (open: boolean) => void;
+  /** Opened from an engagement's Scope step ("Add new RACM", PwC call 12 Oct):
+   *  the process is settled, the company pre-picked, and the RACM publishes as
+   *  it saves — the same rules the Scope step's own upload used. */
+  createFor?: { process: string; entity?: string };
 }) {
   const racms = useRacmLibrary();
   // An SOP draft Ira finished after the reader left (stage 5): its notification
@@ -550,6 +554,9 @@ export default function RacmLibraryView({ canManage, creating, setCreating, onOp
 
       {(creating || resuming) && (
         <CreateRacmFlow onClose={() => { setCreating(false); setResuming(undefined); }} resume={resuming}
+          fixedProcess={resuming ? undefined : createFor?.process}
+          defaultEntity={resuming ? undefined : createFor?.entity}
+          publishOnCreate={!resuming && !!createFor}
           onCreated={r => {
             setCreating(false); setResuming(undefined); setProcess('All'); setSearch(''); setStatus('All');
             const n = r.controls.length;

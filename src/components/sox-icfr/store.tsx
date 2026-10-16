@@ -325,7 +325,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { GAP_KIND_LABEL, ipeChecklist, MW_INDICATOR_BY_ID, ROLE_LABEL, spreadLabel, type MwIndicatorId } from './types';
 import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
-import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
+import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, exceptionCourtDetail, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
 import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
 import { findEngagement, registerEngagement } from '../../data/engagements';
@@ -837,6 +837,38 @@ export function useIcfr(): IcfrCtx {
   return c;
 }
 
+/** Seeded exceptions arrive with no picked type. Each takes, ONCE at load, the
+ *  grade it already showed (13 Oct) — from then on it is a pick like any other,
+ *  so editing its exposure no longer moves it. One the old rules couldn't grade
+ *  (unsized) arrives unpicked. */
+function fixTypes(eng: IcfrEngagement): IcfrEngagement {
+  if (!eng.deficiencies.some(d => d.deficiencyType === undefined)) return eng;
+  return { ...eng, deficiencies: eng.deficiencies.map(d => (d.deficiencyType !== undefined ? d : { ...d, deficiencyType: gradeException(d, eng).grade })) };
+}
+
+/** One email per hand-off (PwC call, 12 Oct): whenever an exception moves to a
+ *  new stage, the ONE person its next action waits on is mailed — nobody else.
+ *  Sent through the same door as every write, so no transition can forget it.
+ *  The prototype records the mail on the exception and in its trail; the send
+ *  itself belongs to the notification service. */
+function emailNewCourt(prev: IcfrEngagement, next: IcfrEngagement): IcfrEngagement {
+  if (prev.deficiencies === next.deficiencies) return next;
+  const before = new Map(prev.deficiencies.map(d => [d.id, d.status]));
+  const events: ExecutionEvent[] = [];
+  const deficiencies = next.deficiencies.map(d => {
+    const was = before.get(d.id);
+    if (was === undefined || was === d.status || d.status === 'Closed') return d;
+    const who = exceptionCourtDetail(d, next).who;
+    if (!who?.trim()) return d;
+    events.push({
+      id: `ex-mail-${d.id}-${Date.now().toString(36)}`, controlId: d.controlId, track: d.track, kind: 'exception',
+      verb: `emailed ${who} — ${d.id} is waiting on them`, from: was, to: d.status, by: 'System', role: 'auditor', at: 'just now',
+    });
+    return { ...d, lastEmail: { to: who, at: 'just now', status: d.status } };
+  });
+  return events.length ? { ...next, deficiencies, executions: [...events, ...next.executions] } : next;
+}
+
 export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { children: ReactNode; initialRole?: Role; seedMeta?: SeedMeta }) {
   // Navigation refused for a reason has to SAY the reason — a click that quietly
   // does nothing reads as a broken page. The app's toast provider sits above this
@@ -856,7 +888,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [kept] = useState(() => liveWorkspace(keepKey));
   const [eng, setEngState] = useState<IcfrEngagement>(() => {
     // A rename on the Engagements list since then still shows.
-    if (kept) return seedMeta?.name && seedMeta.name !== kept.eng.name ? { ...kept.eng, name: seedMeta.name } : kept.eng;
+    if (kept) return fixTypes(seedMeta?.name && seedMeta.name !== kept.eng.name ? { ...kept.eng, name: seedMeta.name } : kept.eng);
     const seeded = seedIcfrEngagement(seedMeta);
     // A year-end / roll-forward created with "Carry over from" a signed interim
     // engagement (5 Oct 2026) takes that interim's controls, rolled forward —
@@ -864,7 +896,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     const from = seedMeta?.carryFrom;
     const source = from ? (from.id ? liveWorkspace(from.id)?.eng : undefined) ?? seedIcfrEngagement(from) : undefined;
     const carried = source ? carriedOver(seeded, source) : seeded;
-    return applyDocRequirements(carried).eng;
+    return fixTypes(applyDocRequirements(carried).eng);
   });
   /** Every write to the register goes through here, and every write is re-checked
    *  against DOC_REQUIREMENTS.
@@ -887,9 +919,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
    *  returns the SAME engagement object when there is nothing to add, so a write
    *  that leaves every control's class alone allocates nothing beyond the walk. */
   const setEng = useCallback<Dispatch<SetStateAction<IcfrEngagement>>>(next => {
-    setEngState(prev => applyDocRequirements(
+    setEngState(prev => emailNewCourt(prev, applyDocRequirements(
       typeof next === 'function' ? (next as (p: IcfrEngagement) => IcfrEngagement)(prev) : next,
-    ).eng);
+    ).eng));
   }, []);
   const [role, setRole] = useState<Role>(initialRole);
   const [tab, setTabState] = useState<SoxTab>('overview');
@@ -1161,6 +1193,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // and ₹0 is under every de-minimis line — so this literal alone used to
         // grade every new finding Clearly Trivial the instant it was raised.
         magnitude: null,
+        // Picked by the auditor (PwC call, 12 Oct) — never concluded for them.
+        deficiencyType: null,
         mwIndicators: [],
         compensatingControlId: undefined,
         aggregationGroup: c.process,
@@ -4065,7 +4099,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const fields: { field: string; from: number; to: number | undefined }[] = [
         { field: 'Overall materiality', from: prev.materiality, to: patch.materiality },
         { field: 'Performance materiality', from: prev.performanceMateriality, to: patch.performanceMateriality },
-        { field: 'Clearly-trivial threshold', from: prev.rules.clearlyTrivial, to: patch.clearlyTrivial },
+        { field: 'Posting materiality', from: prev.rules.clearlyTrivial, to: patch.clearlyTrivial },
         { field: 'SD band', from: prev.rules.sdBandPct, to: patch.sdBandPct },
       ];
       const changes = fields
@@ -4731,7 +4765,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // Unsized — and this one doubly so: the comment on this whole action
         // already says exposure and likelihood do not apply here, so a figure
         // would be invented.
-        likelihood: 'Reasonably possible', magnitude: null, mwIndicators: [],
+        likelihood: 'Reasonably possible', magnitude: null, deficiencyType: null, mwIndicators: [],
         aggregationGroup: c.process,
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',

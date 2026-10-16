@@ -98,11 +98,11 @@ export default function MaterialityWorksheet({ basis, locked, onChange }: {
           </div>
         </div>
         <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3">
-          <div className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">Clearly trivial</div>
+          <div className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">Posting materiality</div>
           <div className="text-[1.25rem] font-bold tabular-nums text-ink-900 mt-1">{fmtFull(ct)}</div>
           <div className="mt-1.5 flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
             <input type="number" min={1} max={10} value={basis.ctPct} disabled={locked}
-              onChange={e => set({ ctPct: Math.max(1, Math.min(10, +e.target.value || 5)) })} aria-label="Clearly trivial percentage"
+              onChange={e => set({ ctPct: Math.max(1, Math.min(10, +e.target.value || 5)) })} aria-label="Posting materiality percentage"
               className="h-6 w-12 px-1.5 rounded-md border border-canvas-border text-[0.6875rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-70" />
             % of overall — logged, not evaluated
           </div>

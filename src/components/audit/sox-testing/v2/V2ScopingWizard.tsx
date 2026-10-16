@@ -694,8 +694,8 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   </div>
                 </div>
                 <div>
-                  <FieldLabel>Clearly-trivial threshold (% of overall)</FieldLabel>
-                  <input aria-label="Clearly-trivial threshold (% of overall)"
+                  <FieldLabel>Posting materiality (% of overall)</FieldLabel>
+                  <input aria-label="Posting materiality (% of overall)"
                     type="number" min={1} max={10}
                     value={cttPct}
                     onChange={e => setCttPct(Number(e.target.value))}
@@ -710,7 +710,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)}
                   note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(pmCr)} strong note={`${pmPct}% of overall — the scoping threshold`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
+                <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
                   <p className="text-[0.75rem] text-text-muted leading-relaxed">
@@ -1216,7 +1216,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
               <ReviewCard title="Materiality">
                 <LadderRow label="Overall" value={fmtCr(overallCr)} note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
                 <LadderRow label="Performance" value={fmtCr(pmCr)} strong note={`${pmPct}% of overall — the scoping threshold`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
+                <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
               </ReviewCard>
               <ReviewCard title="Scope funnel">
                 <FunnelRow label="Entities derived in scope" value={inScopeEntityCount} />

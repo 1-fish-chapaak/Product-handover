@@ -390,6 +390,18 @@ export function reconcileConfirmations(eng: IcfrEngagement): IcfrEngagement {
  *  ask for one without the group being consulted again on the way. Step 1 of the
  *  order feeding step 5, never the other way round. */
 export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly = false): ExceptionGradeResult {
+  // ── The auditor's pick (PwC call, 12 Oct) ── the type is chosen, not
+  // concluded: exposure stays its own number and nothing below grades from it.
+  // Only a record from before the change (`undefined`) still runs the old rules.
+  if (d.deficiencyType !== undefined) {
+    if (d.deficiencyType === null) {
+      return { grade: null, ladderGrade: null, working: [{ n: 0, rule: 'Deficiency type', fired: false, detail: 'Not picked yet — the auditor chooses the type.' }] };
+    }
+    return {
+      grade: d.deficiencyType, ladderGrade: d.deficiencyType,
+      working: [{ n: 0, rule: 'Deficiency type', fired: true, detail: `${d.deficiencyType}, picked by ${d.deficiencyTypeBy ?? 'the auditor'}. Exposure and likelihood are recorded beside it; they don’t set it.` }],
+    };
+  }
   const M = eng.materiality;
   const band = eng.rules.sdBandPct;
   const working: GradeStep[] = [];
@@ -436,10 +448,10 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
 
   // ── 3 ── below the de-minimis line nothing further is evaluated.
   if (isClearlyTrivial(d.magnitude, eng.rules)) {
-    working.push({ n: 3, rule: 'Clearly trivial', fired: true, detail: `${RUPEE(d.magnitude)} is at or under ${RUPEE(eng.rules.clearlyTrivial)} — logged, not evaluated further.` });
+    working.push({ n: 3, rule: 'Clearly trivial', fired: true, detail: `${RUPEE(d.magnitude)} is at or under posting materiality (${RUPEE(eng.rules.clearlyTrivial)}) — logged, not evaluated further.` });
     return { grade: 'Clearly Trivial', ladderGrade: 'Clearly Trivial', working, capBlocked };
   }
-  working.push({ n: 3, rule: 'Clearly trivial', fired: false, detail: `${RUPEE(d.magnitude)} is above the ${RUPEE(eng.rules.clearlyTrivial)} floor.` });
+  working.push({ n: 3, rule: 'Clearly trivial', fired: false, detail: `${RUPEE(d.magnitude)} is above posting materiality (${RUPEE(eng.rules.clearlyTrivial)}).` });
 
   // ── 4 & 5 ── the ladder, with the remote-likelihood ceiling over it.
   let ladderGrade: ExceptionGrade;
@@ -557,7 +569,8 @@ export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>
 /** Has the exposure been ANSWERED? The twin of `rootCauseReady`, and the other
  *  half of what step 2 exists to settle. Nil is an answer; nil without a reason
  *  is the blank wearing a number's clothes, and is not. */
-export function sizingReady(d: Pick<Deficiency, 'magnitude' | 'magnitudeZeroReason'>): boolean {
+export function sizingReady(d: Pick<Deficiency, 'magnitude' | 'magnitudeZeroReason' | 'deficiencyType'>): boolean {
+  if (d.deficiencyType === null) return false;
   if (d.magnitude === null) return false;
   if (d.magnitude === 0) return !!d.magnitudeZeroReason?.trim();
   return true;
